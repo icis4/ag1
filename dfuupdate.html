@@ -399,6 +399,8 @@
         <div class="actions">
           <button id="connectButton" type="button">Connect Device</button>
           <button id="flashButton" type="button" disabled>Flash Firmware</button>
+          <button id="runAppButton" type="button" class="ghost" disabled>Run Application</button>
+          <button id="disconnectButton" type="button" class="ghost" disabled>Disconnect</button>
           <button id="installButton" type="button" class="ghost" hidden>Install Locally</button>
         </div>
       </article>
@@ -459,6 +461,8 @@
       progressLabel: document.getElementById("progressLabel"),
       statusLog: document.getElementById("statusLog"),
       connectButton: document.getElementById("connectButton"),
+      runAppButton: document.getElementById("runAppButton"),
+      disconnectButton: document.getElementById("disconnectButton"),
       flashButton: document.getElementById("flashButton"),
       installButton: document.getElementById("installButton"),
     };
@@ -492,8 +496,11 @@
 
     function setBusy(isBusy) {
       const readyToFlash = Boolean(appState.firmware && appState.dfu && !isBusy);
+      const isConnected = Boolean(appState.dfu) && !isBusy;
       elements.connectButton.disabled = isBusy;
       elements.flashButton.disabled = !readyToFlash;
+      elements.runAppButton.disabled = !isConnected;
+      elements.disconnectButton.disabled = !isConnected;
       elements.firmwareFile.disabled = isBusy;
       elements.transferSize.disabled = isBusy;
       elements.memoryDescriptor.disabled = isBusy;
@@ -1045,12 +1052,136 @@
 
       async manifest(startAddress) {
         await this.dfuseCommand(DFU.dfuse.setAddress, startAddress, 4);
-        await this.download(new ArrayBuffer(0), 0);
+        // Block 2, not 0: in DfuSe block 0 is the command block, and a
+        // zero-length write there is just an empty command the bootloader
+        // accepts without leaving DFU mode. Data blocks start at 2, and the
+        // zero-length download that ends the transfer must carry that number
+        // for the device to manifest and jump to the application.
+        await this.download(new ArrayBuffer(0), 2);
         const status = await this.pollUntilStable();
         if (![DFU.states.dfuManifest, DFU.states.dfuManifestWaitReset, DFU.states.dfuIdle].includes(status.state)) {
           throw new Error(`Unexpected manifestation state ${status.state}.`);
         }
       }
+    }
+
+    // LF only: the melexis_io parser strips just the trailing \n, so CR+LF
+    // would leave a stray \r glued to the argument and the command is rejected.
+    const DFU_ENTER_COMMAND = ":syst:dfu 42\n";
+
+    // The Terminal page runs in its own document and cannot hand over its open
+    // port. Ports the user already granted to this origin are visible here
+    // though, so open one briefly and ask the board to reboot into its
+    // bootloader — that saves doing it by hand before every flash.
+    // Best effort throughout: any failure just falls through to the picker.
+    async function requestDfuModeOverSerial() {
+      if (!navigator.serial) {
+        return false;
+      }
+
+      let ports = [];
+      try {
+        ports = await navigator.serial.getPorts();
+      } catch {
+        return false;
+      }
+
+      if (!ports.length) {
+        return false;
+      }
+
+      for (const port of ports) {
+        let isOpen = false;
+        try {
+          await port.open({ baudRate: 115200 });
+          isOpen = true;
+
+          const writer = port.writable.getWriter();
+          try {
+            await writer.write(new TextEncoder().encode(DFU_ENTER_COMMAND));
+          } finally {
+            writer.releaseLock();
+          }
+
+          const reply = await readSerialBriefly(port, 600);
+
+          // The firmware answers, then reboots after ~0.5 s and the CDC port
+          // disappears, so closing is expected to fail on the success path.
+          isOpen = false;
+          try {
+            await port.close();
+          } catch {
+            /* already gone */
+          }
+
+          if (/entering dfu/i.test(reply)) {
+            log("Board acknowledged :syst:dfu 42 — rebooting into the bootloader.");
+          } else if (/\(ERROR\)|unknown command/i.test(reply)) {
+            log("Serial device rejected :syst:dfu 42; put the board into DFU mode yourself.");
+            return false;
+          } else {
+            log("Sent :syst:dfu 42 to the serial port.");
+          }
+
+          // Let the bootloader enumerate before the WebUSB picker opens.
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          return true;
+        } catch (error) {
+          if (isOpen) {
+            try {
+              await port.close();
+            } catch {
+              /* ignore */
+            }
+          }
+          if (String(error?.name) === "InvalidStateError") {
+            log("Serial port is busy — disconnect it in the Terminal tab if the board does not appear in DFU mode.");
+          }
+        }
+      }
+
+      return false;
+    }
+
+    async function readSerialBriefly(port, timeoutMs) {
+      if (!port.readable) {
+        return "";
+      }
+
+      const reader = port.readable.getReader();
+      const deadline = Date.now() + timeoutMs;
+      let text = "";
+
+      try {
+        while (Date.now() < deadline) {
+          const chunk = await Promise.race([
+            reader.read(),
+            new Promise((resolve) => setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))),
+          ]);
+          if (!chunk || chunk.done) {
+            break;
+          }
+          text += new TextDecoder().decode(chunk.value);
+          if (text.includes(")>")) {
+            break;
+          }
+        }
+      } catch {
+        /* the port can vanish mid-read while the board reboots */
+      } finally {
+        try {
+          await reader.cancel();
+        } catch {
+          /* ignore */
+        }
+        try {
+          reader.releaseLock();
+        } catch {
+          /* ignore */
+        }
+      }
+
+      return text;
     }
 
     async function connectDevice() {
@@ -1154,6 +1285,40 @@
 
     function isExpectedDisconnectError(error) {
       return Boolean(error?.message && error.message.includes("device was disconnected"));
+    }
+
+    // DfuSe leaves DFU mode the same way a flash finishes: point the address
+    // pointer at the application base and issue a zero-length download. The
+    // device then resets into the application and drops off the bus, so the
+    // disconnect that follows is the success path, not a failure.
+    async function runApplication() {
+      if (!appState.dfu) {
+        throw new Error("No DFU device is connected.");
+      }
+
+      const address = applicationStartAddress();
+      log(`Leaving DFU mode at 0x${address.toString(16).padStart(8, "0").toUpperCase()}.`);
+
+      try {
+        await appState.dfu.manifest(address);
+      } catch (error) {
+        if (!isExpectedDisconnectError(error)) {
+          throw error;
+        }
+      }
+
+      log("Device left DFU mode and should now be running the application.");
+      await releaseDevice();
+    }
+
+    // The device reports its own memory map; fall back to the STM32 internal
+    // flash base when it exposes no usable descriptor.
+    function applicationStartAddress() {
+      const segments = appState.dfu?.memoryInfo?.segments;
+      if (segments?.length) {
+        return segments[0].start;
+      }
+      return 0x08000000;
     }
 
     async function releaseDevice() {
@@ -1272,10 +1437,34 @@
     elements.connectButton.addEventListener("click", async () => {
       setBusy(true);
       try {
+        await requestDfuModeOverSerial();
         await connectDevice();
       } catch (error) {
         log(error.message, "error");
         await releaseDevice();
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    elements.runAppButton.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        await runApplication();
+      } catch (error) {
+        log(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    elements.disconnectButton.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        await releaseDevice();
+        log("The board stays in DFU mode; use Run Application to start the firmware.");
+      } catch (error) {
+        log(error.message, "error");
       } finally {
         setBusy(false);
       }
