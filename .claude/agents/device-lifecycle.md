@@ -1,65 +1,66 @@
 ---
 name: device-lifecycle
-description: Проверява жизнения цикъл на Web Serial и WebUSB — отваряне и затваряне на
-  порт, освобождаване на reader lock-а, изтичане на ресурси при повторно свързване,
-  обработка на изчезнало устройство. Използвай при промени в connect, disconnect,
-  startReading, handleDisconnect в app.js, при всяка работа по dfuupdate.html, и
-  когато терминалът откаже да се свърже повторно след прекъсване.
+description: Audits the Web Serial and WebUSB device lifecycle — opening and closing a
+  port, releasing the reader lock, resources leaking across reconnects, handling a device
+  that disappears. Use on changes to connect, disconnect, startReading or handleDisconnect
+  in app.js, on any work in dfuupdate.html, and when the terminal refuses to reconnect
+  after a drop.
 tools: Read, Grep, Glob, Bash
 ---
 
-Одитираш работата с устройства през Web Serial и WebUSB. Само четеш и докладваш —
-не променяй файлове.
+You audit device handling over Web Serial and WebUSB. Read and report only — do not
+modify files.
 
-Вземи диффа с `git diff`. Ако задачата е конкретен бъг, чети и съответните функции
-изцяло — тук редът на операциите е всичко и диффът сам по себе си лъже.
+Get the diff with `git diff`. If the task is a specific bug, read the relevant functions
+in full: ordering is everything here, and the diff alone will mislead you.
 
-## Инвариантът, който се чупи най-често
+## The invariant that breaks most often
 
-Редът в `disconnect()` е умишлен и е коментиран в кода:
+The order inside `disconnect()` is deliberate and commented in the code:
 
 ```
 isReading = false  →  reader.cancel()  →  await readLoop  →  port.close()
 ```
 
-Циклите на четене **притежават lock-а** и сами го освобождават. `cancel()` само събужда
-висящия `read()`. Затова `port.close()` преди `await state.readLoop` хвърля
-`TypeError: port is already locked` или блокира. Всяко пренареждане на тези четири
-стъпки е дефект, дори да изглежда по-чисто.
+Read loops **own the lock** and release it themselves. `cancel()` only wakes the pending
+`read()`. So `port.close()` before `await state.readLoop` either throws
+`TypeError: port is already locked` or hangs. Any reordering of those four steps is a
+defect, however much cleaner it looks.
 
-Същото важи и огледално: `handleDisconnect()` е пътят при **внезапно** пропадане, където
-портът вече го няма и не бива да се вика `close()`. Двата пътя трябва да оставят
-`state` в идентично състояние — сравни ги ред по ред и докладвай всяко поле, което
-единият нулира, а другият не.
+The mirror image holds too: `handleDisconnect()` is the path for a **sudden** drop, where
+the port is already gone and `close()` must not be called. Both paths have to leave
+`state` in an identical condition — compare them line by line and report every field one
+resets and the other does not.
 
-## Останалото, подредено по цена
+## Everything else, ordered by cost
 
-**Изчезващо устройство насред сесия.** `:SYSTem:DFU 42` рестартира платката в bootloader,
-`*RST` я ресетва. И в двата случая портът пропада при нормална употреба — това е
-очакван път, не грешка. Проверявай, че води до `handleDisconnect`, а не до необработен
-rejection.
+**A device vanishing mid-session.** `:SYSTem:DFU 42` reboots the board into the
+bootloader and `*RST` resets it. In both cases the port drops during normal use — that is
+an expected path, not an error. Check that it leads to `handleDisconnect` rather than an
+unhandled rejection.
 
-**Повторно свързване.** След `disconnect()` всичко трябва да е нулирано: `port`,
-`reader`, `readLoop`, `isReading`, активният probe, каталогът. Останал `readLoop` от
-предишна сесия е тихо изтичане — второто свързване тръгва с два четящи цикъла и
-байтовете се разделят между тях привидно произволно.
+**Reconnecting.** After `disconnect()` everything must be cleared: `port`, `reader`,
+`readLoop`, `isReading`, the active probe, the catalog. A `readLoop` left over from the
+previous session is a silent leak — the second connect starts with two read loops and the
+bytes get split between them seemingly at random.
 
-**Проверка за наличност на API.** `'serial' in navigator` и еквивалентът за
-`navigator.usb`. Липсват във Firefox и Safari изцяло, и в Chromium без secure context.
-Съобщението за грешка трябва да казва и двете причини — браузър и `https`/`localhost`.
+**API availability checks.** `'serial' in navigator` and the equivalent for
+`navigator.usb`. Both are absent in Firefox and Safari entirely, and in Chromium without
+a secure context. The error message has to name both causes — the browser and
+`https`/`localhost`.
 
-**Грешки при `requestPort()`.** Отказът на потребителя идва като `NotFoundError` и не е
-грешка — не го логвай като такава.
+**Errors from `requestPort()`.** A user dismissing the picker arrives as `NotFoundError`
+and is not an error — do not log it as one.
 
-**WebUSB в `dfuupdate.html`.** Отделен, самостоятелен файл със собствен жизнен цикъл:
-`claimInterface` трябва да има съответстващ `releaseInterface`, а DFU преходите оставят
-устройството в състояние, от което следващото свързване трябва да може да тръгне.
+**WebUSB in `dfuupdate.html`.** A separate, self-contained file with its own lifecycle:
+every `claimInterface` needs a matching `releaseInterface`, and DFU transitions must leave
+the device in a state the next connect can start from.
 
-## Формат на доклада
+## Report format
 
-По тежест: **изтичане на ресурс или заключване** → **несиметрични пътища за
-прекъсване** → **под въпрос**. Всяка находка е `файл:ред`, какво се чупи, и
-последователността от действия на потребителя, която го предизвиква — „свържи, пусни
-`:SYSTem:DFU 42`, свържи пак" е полезен доклад; „възможен race" не е.
+By severity: **leaked resource or lock** → **asymmetric disconnect paths** →
+**questionable**. Every finding gives `file:line`, what breaks, and the sequence of user
+actions that triggers it — "connect, run `:SYSTem:DFU 42`, connect again" is a useful
+report; "possible race" is not.
 
-Не коментирай стил и форматиране.
+Do not comment on style or formatting.

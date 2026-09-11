@@ -1,51 +1,50 @@
 ---
 name: deploy-check
-description: Проверява дали сайтът ще работи след деплой на GitHub Pages под /ag1 —
-  относителни пътища, списъкът в service worker-а, манифестът, липса на build step.
-  Използвай преди push към master, при добавяне или преименуване на страница, и при
-  всяка промяна в service-worker.js или manifest.webmanifest.
+description: Checks whether the site will still work once deployed to GitHub Pages under
+  /ag1 — relative paths, the service worker's file list, the manifest, and the absence of
+  a build step. Use before pushing to master, when adding or renaming a page, and on any
+  change to service-worker.js or manifest.webmanifest.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 
-Проверяваш дали промяната ще оцелее деплоя. Само четеш и докладваш — не променяй файлове.
+You check whether a change survives deployment. Read and report only — do not modify files.
 
-Два факта определят всичко тук: сайтът се сервира от **поддиректория**
-(`icis4.github.io/ag1`, не от корена), и **няма build step** — файловете отиват в
-браузъра точно както са в репото, право от `master`.
+Two facts drive everything here: the site is served from a **subdirectory**
+(`icis4.github.io/ag1`, not the root), and there is **no build step** — files reach the
+browser exactly as they sit in the repo, straight from `master`.
 
-Започни с `git status --short` и `git diff`.
+Start with `git status --short` and `git diff`.
 
-## Проверките
+## The checks
 
-**Относителни пътища.** Всичко трябва да е `./нещо` или `нещо`, никога `/нещо`. Водеща
-наклонена черта сочи към `icis4.github.io/` и връща 404 в продукция, докато на
-`localhost:3000` работи отлично — затова този дефект не се хваща при локално тестване.
-Проверявай `href`, `src`, `fetch`, регистрацията на service worker-а и полетата
-`start_url` / `scope` в манифеста.
+**Relative paths.** Everything must be `./something` or `something`, never `/something`.
+A leading slash points at `icis4.github.io/` and 404s in production while working
+perfectly on `localhost:3000` — which is why this defect never shows up in local
+testing. Check `href`, `src`, `fetch`, the service worker registration, and the
+manifest's `start_url` / `scope`.
 
-**Списъкът `SHELL` в `service-worker.js`.** Това е списък, който се разминава с
-реалността при всяко добавяне на страница. Сравни го с това, което реално има в
-директорията, и с таблицата „Layout" в `README.md`. Липсващият файл не чупи install-а
-(добавят се поединично с `.catch()`), но изпада от офлайн режима безшумно.
+**The `SHELL` list in `service-worker.js`.** This is a list that drifts out of sync every
+time a page is added. Compare it against what is actually in the directory and against
+the "Layout" table in `README.md`. A missing file does not break installation (entries
+are added individually with `.catch()`), but it silently drops out of offline mode.
 
-**Версията на кеша.** `CACHE` е `melexis-io-tools-v1`. Работникът е **network-first
-нарочно** — коментарът в началото на файла обяснява защо. Ако диффът го обръща на
-cache-first, това е регресия и версията вече трябва да се вдига при всеки деплой.
+**Cache version.** `CACHE` is `melexis-io-tools-v1`. The worker is **network-first on
+purpose** — the comment at the top of the file explains why. If the diff flips it to
+cache-first, that is a regression, and the version then has to be bumped on every deploy.
 
-**Няма build step.** Сигнали, че някой е забравил това: `import` от голо име на пакет
-(`from "react"`), JSX, TypeScript синтаксис, `process.env`, `require`. ES модули с
-относителен път са наред.
+**No build step.** Signs someone forgot: bare-specifier `import` (`from "react"`), JSX,
+TypeScript syntax, `process.env`, `require`. Relative-path ES modules are fine.
 
-**Външни ресурси.** Всичко, което се тегли от чужд домейн, трябва да оцелее без
-мрежа — service worker-ът нарочно не пипа cross-origin заявки, така че шрифт от CDN
-просто няма да го има офлайн.
+**External resources.** Anything fetched from another origin has to survive without a
+network: the service worker deliberately leaves cross-origin requests alone, so a CDN
+font simply will not be there offline.
 
-**Нови файлове.** Провери дали `.gitignore` случайно не изключва нещо, което трябва да
-се качи, и дали вендорнати файлове носят лиценза си.
+**New files.** Check that `.gitignore` is not accidentally excluding something that
+should ship, and that any vendored file carries its licence.
 
-## Формат на доклада
+## Report format
 
-По тежест: **404 в продукция** → **изпада от офлайн режима** → **под въпрос**. Всяка
-находка с `файл:ред` и какъв точно URL ще се поиска срещу какъв съществува. Ако всичко
-е наред, кажи го с едно изречение.
+By severity: **404 in production** → **drops out of offline mode** → **questionable**.
+Every finding with `file:line`, and which URL will actually be requested versus which one
+exists. If everything is fine, say so in one sentence.
