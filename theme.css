@@ -1,0 +1,280 @@
+/* Shared theme for the Melexis IO Tools suite.
+ * Derived from the Pressure app's brand stylesheet: the selectors are kept
+ * so its markup still styles correctly, with the token values remapped onto
+ * the suite's dark palette. Loads on top of Bootstrap.
+ */
+
+:root {
+  /* --- Shared design tokens (same values as the rest of the site) --- */
+  --clr-bg:            hsl(225, 30%, 6%);
+  --clr-surface:       hsl(225, 25%, 10%);
+  --clr-surface-2:     hsl(225, 22%, 14%);
+  --clr-border:        hsl(225, 18%, 18%);
+  --clr-border-subtle: hsl(225, 18%, 14%);
+  --clr-text:          hsl(210, 20%, 88%);
+  --clr-text-muted:    hsl(210, 15%, 55%);
+  --clr-accent:        hsl(174, 72%, 52%);
+  --clr-accent-glow:   hsla(174, 72%, 52%, .25);
+  --clr-danger:        hsl(0, 72%, 58%);
+  --clr-warning:       hsl(38, 92%, 55%);
+  --clr-success:       hsl(142, 64%, 48%);
+
+  --ff-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ff-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+
+  /* --- Brand tokens, remapped onto the dark palette ---
+     The Pressure page styles every Bootstrap component through these, so
+     redefining them re-themes the whole app without touching its rules. --- */
+  --mx-royal-blue:         var(--clr-surface);
+  --mx-royal-blue-700:     hsla(225, 25%, 14%, .85);
+  --mx-royal-blue-600:     hsla(225, 25%, 16%, .70);
+  --mx-royal-blue-500:     hsla(225, 25%, 14%, .55);
+  --mx-electric-green:     var(--clr-accent);
+  --mx-electric-green-800: hsla(174, 72%, 52%, .80);
+  --mx-gold-yellow:        var(--clr-warning);
+  --mx-coral-red:          var(--clr-danger);
+  --mx-coral-red-800:      hsla(0, 72%, 58%, .80);
+  --mx-charcoal-grey:      var(--clr-surface-2);
+  --mx-steel-grey:         var(--clr-text-muted);
+  --mx-teal:               hsl(190, 65%, 45%);
+  --mx-black:              hsl(225, 30%, 4%);
+  --mx-white:              var(--clr-text);
+
+  --mx-bg:          var(--clr-bg);
+  --mx-surface:     var(--clr-surface);
+  --mx-text:        var(--clr-text);
+  --mx-text-muted:  var(--clr-text-muted);
+  --mx-accent:      var(--clr-accent);
+  --mx-accent-soft: hsla(174, 72%, 52%, .85);
+  --mx-accent-2:    hsl(174, 60%, 70%);
+  --mx-link:        var(--clr-accent);
+  --mx-border:      var(--clr-border);
+  --mx-success:     var(--clr-success);
+  --mx-warning:     var(--clr-warning);
+  --mx-error:       var(--clr-danger);
+
+  /* Chart palette, retinted for a dark ground (brighter, more separable) */
+  --mx-t1:  hsl(174, 72%, 52%);
+  --mx-t2:  hsl(199, 75%, 60%);
+  --mx-t3:  hsl(38, 92%, 62%);
+  --mx-t4:  hsl(280, 60%, 70%);
+  --mx-t5:  hsl(142, 58%, 55%);
+  --mx-t6:  hsl(15, 80%, 65%);
+  --mx-t7:  hsl(220, 70%, 68%);
+  --mx-t8:  hsl(60, 60%, 62%);
+  --mx-t9:  hsl(330, 62%, 68%);
+  --mx-t10: hsl(95, 48%, 60%);
+  --mx-t11: hsl(0, 72%, 65%);
+  --mx-t12: hsl(250, 55%, 72%);
+
+  --mx-bg-light: var(--clr-surface-2);
+
+  --mx-font-sans: var(--ff-sans);
+  --mx-font-mono: var(--ff-mono);
+
+  --mx-radius: 6px;
+  --mx-shadow: 0 8px 32px hsla(0, 0%, 0%, .4);
+  --mx-space: 16px;
+}
+
+/* --- Bootstrap dark surfaces, so untouched components match too --- */
+[data-bs-theme="dark"] {
+  --bs-body-bg: var(--clr-bg);
+  --bs-body-color: var(--clr-text);
+  --bs-border-color: var(--clr-border);
+  --bs-secondary-color: var(--clr-text-muted);
+  --bs-emphasis-color: var(--clr-text);
+  --bs-link-color: var(--clr-accent);
+  --bs-link-hover-color: hsl(174, 72%, 64%);
+  --bs-primary: var(--clr-accent);
+  --bs-code-color: var(--clr-accent);
+  --bs-border-radius: var(--mx-radius);
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mx-bg);
+  color: var(--mx-white);
+  font-family: var(--mx-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Opt-in light theme wrapper */
+.theme-light {
+  background: var(--mx-bg-light);
+  color: #1a1a1a;
+}
+.theme-light .card {
+  background: #ffffff;
+  border-color: #d6d6d6;
+}
+.theme-light .button, .theme-light .btn, .theme-light button {
+  color: #ffffff;
+}
+
+/* Containers */
+.container,
+.wrapper,
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: calc(var(--mx-space) * 2);
+}
+
+.card {
+  background: var(--mx-surface);
+  border-radius: var(--mx-radius);
+  box-shadow: var(--mx-shadow);
+  border: 1px solid var(--mx-border);
+  padding: calc(var(--mx-space) * 2);
+}
+
+/* Headings */
+h1, h2, h3, h4 {
+  color: var(--mx-text-muted);
+  letter-spacing: 0.02em;
+}
+
+h1 { font-weight: 600; font-size: 2rem; }
+h2 { font-weight: 600; font-size: 1.6rem; }
+h3 { font-weight: 600; font-size: 1.25rem; }
+
+/* Text */
+p, li { color: var(--mx-white); }
+small { color: var(--mx-white); opacity: 0.85; }
+
+/* Links */
+a { color: var(--mx-link); text-decoration: none; }
+a:hover { color: var(--mx-white); text-decoration: underline; }
+
+/* Buttons */
+.button, button, .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: var(--mx-radius);
+  padding: 0.5rem 0.9rem; /* unified size */
+  font-size: 0.95rem;     /* unified font size */
+  line-height: 1.2;       /* consistent height */
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--mx-white);
+  box-shadow: 0 4px 12px rgba(0, 53, 75, 0.25);
+  transition: transform .08s ease, opacity .2s ease;
+  --bs-btn-active-bg: rgba(101, 187, 169, 0.50);
+}
+
+/* .button:hover, button:hover, .btn:hover { transform: translateY(-1px); color: var(--mx-white);} */
+
+.button:active, button:active, .btn:active {
+  background-color: var(--mx-black);
+}
+
+.button:disabled, button:disabled, .btn:disabled { 
+  opacity: 0.6; 
+  background-color: var(--mx-electric-green-800);
+  cursor: not-allowed; 
+  color: var(--mx-white);
+}
+
+.button:hold
+
+/* Ensure Bootstrap small buttons match standard size */
+.btn-sm {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+/* Compact action buttons: Clear, Save..., Send */#clear, #save, #send {
+  padding: 0.5rem 0.9rem; /* remove padding for compact look */
+}
+
+.btn-secondary {
+  background: var(--mx-steel-grey);
+  color: #0f1719;
+  box-shadow: none;
+}
+
+/* Nav links (Bootstrap) */
+.nav-link {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* Inputs */
+input[type="text"], input[type="number"], input[type="email"], input[type="file"], select, textarea {
+  width: 100%;
+  background: var(--mx-white);
+  color: var(--mx-black);
+  border: 0px solid var(--mx-white);
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--mx-electric-green);
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid var(--mx-border); padding: 0.6rem; }
+th { color: var(--mx-white); font-weight: 600; }
+td { color: var(--mx-text-muted); }
+
+/* Code blocks */
+pre, code { font-family: var(--mx-font-mono); }
+pre {
+  background: #0A0E20;
+  color: #BBD2F7;
+  border: 1px solid var(--mx-border);
+  border-radius: var(--mx-radius);
+  padding: 1rem;
+  overflow: auto;
+}
+
+/* Data visualization helpers (use tertiary palette) */
+.chart-color-1 { color: var(--mx-t1); }
+.chart-color-2 { color: var(--mx-t2); }
+.chart-color-3 { color: var(--mx-t3); }
+.chart-color-4 { color: var(--mx-t4); }
+.chart-color-5 { color: var(--mx-t5); }
+.chart-color-6 { color: var(--mx-t6); }
+.chart-color-7 { color: var(--mx-t7); }
+.chart-color-8 { color: var(--mx-t8); }
+.chart-color-9 { color: var(--mx-t9); }
+.chart-color-10 { color: var(--mx-t10); }
+.chart-color-11 { color: var(--mx-t11); }
+.chart-color-12 { color: var(--mx-t12); }
+
+.chart-bg-1 { background-color: var(--mx-t1); }
+.chart-bg-2 { background-color: var(--mx-t2); }
+.chart-bg-3 { background-color: var(--mx-t3); }
+.chart-bg-4 { background-color: var(--mx-t4); }
+.chart-bg-5 { background-color: var(--mx-t5); }
+.chart-bg-6 { background-color: var(--mx-t6); }
+.chart-bg-7 { background-color: var(--mx-t7); }
+.chart-bg-8 { background-color: var(--mx-t8); }
+.chart-bg-9 { background-color: var(--mx-t9); }
+.chart-bg-10 { background-color: var(--mx-t10); }
+.chart-bg-11 { background-color: var(--mx-t11); }
+.chart-bg-12 { background-color: var(--mx-t12); }
+
+/* Utility */
+.muted { color: var(--mx-text-muted); }
+.center { text-align: center; }
+.spacing { margin: var(--mx-space) 0; }
+.accent { color: var(--mx-accent); }
+/* Subtle text utility: same color, slightly reduced emphasis */
+.subtle { color: var(--mx-white); opacity: 0.9; }
+
+/* Status colors */
+.text-success { color: var(--mx-success); }
+.text-warning { color: var(--mx-warning); }
+.text-error { color: var(--mx-error); }
