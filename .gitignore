@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+*.swp
+*~
+
+# Claude Code — personal settings stay local, the shared skill is committed
+.claude/settings.local.json
+
+# Tooling, if any is ever added
+node_modules/
+npm-debug.log*
+*.log

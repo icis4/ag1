@@ -1,0 +1,24 @@
+{
+  "name": "Melexis IO Tools",
+  "short_name": "IO Tools",
+  "description": "Browser utilities for STM32 USB CDC devices: SCPI terminal and USB DFU firmware updater.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0e17",
+  "theme_color": "#0b0e17",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
