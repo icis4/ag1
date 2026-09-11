@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Melexis IO tools — browser-based utilities for STM32 USB CDC devices.">
+  <title>Melexis IO Tools</title>
+  <meta name="theme-color" content="#0b0e17">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --clr-bg:          hsl(225, 30%, 6%);
+      --clr-surface:     hsl(225, 25%, 10%);
+      --clr-border:      hsl(225, 18%, 18%);
+      --clr-text:        hsl(210, 20%, 88%);
+      --clr-text-muted:  hsl(210, 15%, 55%);
+      --clr-accent:      hsl(174, 72%, 52%);
+      --clr-accent-glow: hsla(174, 72%, 52%, .25);
+      --ff-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --radius-sm: 6px;
+      --radius-lg: 14px;
+      --dur-fast: 140ms;
+      --ease-out: cubic-bezier(.2, .8, .3, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      font-family: var(--ff-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient background, matching the terminal's treatment */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(hsla(174, 72%, 52%, .04) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(174, 72%, 52%, .04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 40%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 40%, transparent 100%);
+    }
+
+    .bg-glow {
+      position: fixed;
+      width: 520px;
+      height: 520px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: .5;
+      z-index: 0;
+      pointer-events: none;
+      background: var(--clr-accent-glow);
+    }
+
+    .bg-glow--1 { top: -220px; left: -140px; }
+    .bg-glow--2 { bottom: -260px; right: -160px; background: hsla(190, 65%, 45%, .18); }
+
+    main {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .brand__icon {
+      width: 30px;
+      height: 30px;
+      color: var(--clr-accent);
+      filter: drop-shadow(0 0 8px var(--clr-accent-glow));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--clr-text), var(--clr-accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      margin: 0 0 32px;
+      color: var(--clr-text-muted);
+      font-size: 0.875rem;
+    }
+
+    /* One tile for now; the grid takes more without further changes. */
+    .tools {
+      display: grid;
+      gap: 12px;
+    }
+
+    .tool {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 20px;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-lg);
+      color: inherit;
+      text-align: left;
+      text-decoration: none;
+      transition: border-color var(--dur-fast) var(--ease-out),
+                  transform var(--dur-fast) var(--ease-out),
+                  box-shadow var(--dur-fast) var(--ease-out);
+    }
+
+    .tool:hover {
+      border-color: var(--clr-accent);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px var(--clr-accent-glow);
+    }
+
+    .tool:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 3px;
+    }
+
+    .tool__icon {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      color: var(--clr-accent);
+    }
+
+    .tool__name {
+      display: block;
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+
+    .tool__desc {
+      display: block;
+      margin-top: 2px;
+      color: var(--clr-text-muted);
+      font-size: 0.75rem;
+    }
+
+    .tool__arrow {
+      margin-left: auto;
+      width: 18px;
+      height: 18px;
+      color: var(--clr-text-muted);
+      transition: transform var(--dur-fast) var(--ease-out),
+                  color var(--dur-fast) var(--ease-out);
+    }
+
+    .tool:hover .tool__arrow {
+      color: var(--clr-accent);
+      transform: translateX(3px);
+    }
+
+    .install {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 20px;
+      padding: 9px 16px;
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--clr-text-muted);
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color var(--dur-fast) var(--ease-out),
+                  border-color var(--dur-fast) var(--ease-out);
+    }
+
+    .install svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    .install:hover:enabled {
+      color: var(--clr-accent);
+      border-color: var(--clr-accent);
+    }
+
+    .install:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 2px;
+    }
+
+    .install:disabled { opacity: .5; cursor: default; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tool, .tool__arrow { transition: none; }
+      .tool:hover { transform: none; }
+      .tool:hover .tool__arrow { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow--1"></div>
+  <div class="bg-glow bg-glow--2"></div>
+
+  <main>
+    <div class="brand">
+      <svg class="brand__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2v6m0 8v6M6 8h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z"/>
+        <circle cx="9" cy="13" r="1" fill="currentColor"/>
+        <circle cx="15" cy="13" r="1" fill="currentColor"/>
+      </svg>
+      <h1>Melexis IO Tools</h1>
+    </div>
+    <p class="tagline">Browser utilities for STM32 USB CDC devices.</p>
+
+    <div class="tools">
+      <a class="tool" href="terminal.html">
+        <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 17l6-5-6-5M12 19h8"/>
+        </svg>
+        <span>
+          <span class="tool__name">Terminal</span>
+          <span class="tool__desc">SCPI over USB CDC serial</span>
+        </span>
+        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
+
+      <a class="tool" href="dfuupdate.html">
+        <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v7M9 6l3 3 3-3"/>
+          <rect x="4" y="12" width="16" height="9" rx="2"/>
+          <path d="M8 16.5h8"/>
+        </svg>
+        <span>
+          <span class="tool__name">DFU Update</span>
+          <span class="tool__desc">Flash firmware over USB DFU</span>
+        </span>
+        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
+    </div>
+
+    <button id="installButton" class="install" type="button" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+      </svg>
+      Install locally
+    </button>
+  </main>
+
+  <script>
+    // Chrome fires this only when the app is installable and not yet installed.
+    let deferredInstall = null;
+    const installButton = document.getElementById("installButton");
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      deferredInstall = event;
+      installButton.hidden = false;
+    });
+
+    installButton.addEventListener("click", async () => {
+      if (!deferredInstall) return;
+      installButton.disabled = true;
+      deferredInstall.prompt();
+      await deferredInstall.userChoice;
+      deferredInstall = null;
+      installButton.hidden = true;
+      installButton.disabled = false;
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstall = null;
+      installButton.hidden = true;
+    });
+  </script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js").catch(() => {
+          /* Offline support is optional; the pages work without it. */
+        });
+      });
+    }
+  </script>
+</body>
+</html>

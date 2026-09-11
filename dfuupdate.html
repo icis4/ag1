@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STM DFU Firmware Updater</title>
+  <meta name="description" content="Single-file WebUSB updater for STM DFU devices and ST DfuSe .dfu firmware images.">
+  <meta name="author" content="Ivaylo Ilchev">
+  <meta name="theme-color" content="#0b0e17">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    /* Shared design system with index.html / terminal.html */
+    :root {
+      color-scheme: dark;
+
+      --clr-bg:          hsl(225, 30%, 6%);
+      --clr-surface:     hsl(225, 25%, 10%);
+      --clr-surface-2:   hsl(225, 22%, 14%);
+      --clr-border:      hsl(225, 18%, 18%);
+      --clr-border-subtle: hsl(225, 18%, 14%);
+
+      --clr-text:        hsl(210, 20%, 88%);
+      --clr-text-muted:  hsl(210, 15%, 55%);
+
+      --clr-accent:      hsl(174, 72%, 52%);
+      --clr-accent-glow: hsla(174, 72%, 52%, .25);
+      --clr-accent-bg:   hsla(174, 72%, 52%, .08);
+      --clr-danger:      hsl(0, 72%, 58%);
+
+      --ff-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --ff-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+
+      --shadow-lg: 0 8px 32px hsla(0, 0%, 0%, .4);
+      --dur-fast: 140ms;
+      --ease-out: cubic-bezier(.2, .8, .3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      font-family: var(--ff-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient background, matching the other pages */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(hsla(174, 72%, 52%, .04) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(174, 72%, 52%, .04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 100%);
+    }
+
+    .bg-glow {
+      position: fixed;
+      width: 520px;
+      height: 520px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: .5;
+      z-index: 0;
+      pointer-events: none;
+      background: var(--clr-accent-glow);
+    }
+
+    .bg-glow--1 { top: -240px; left: -160px; }
+    .bg-glow--2 { bottom: -280px; right: -180px; background: hsla(190, 65%, 45%, .18); }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      width: min(980px, calc(100vw - 32px));
+      margin: 32px auto;
+      padding: 28px;
+      border: 1px solid var(--clr-border-subtle);
+      border-radius: var(--radius-xl);
+      background: hsla(225, 25%, 10%, .7);
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(18px) saturate(1.6);
+      -webkit-backdrop-filter: blur(18px) saturate(1.6);
+    }
+
+    .home-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 18px;
+      padding: 4px 10px 4px 6px;
+      border-radius: var(--radius-sm);
+      color: var(--clr-text-muted);
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color var(--dur-fast) var(--ease-out),
+                  background var(--dur-fast) var(--ease-out);
+    }
+
+    .home-link svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .home-link:hover {
+      color: var(--clr-text);
+      background: var(--clr-surface-2);
+    }
+
+    .home-link:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 2px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+      line-height: 1.05;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--clr-text), var(--clr-accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .lede {
+      margin: 0 0 28px;
+      max-width: 70ch;
+      color: var(--clr-text-muted);
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-lg);
+      background: var(--clr-surface);
+    }
+
+    .card h2 {
+      margin: 0 0 16px;
+      color: var(--clr-text-muted);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .field label,
+    .hint,
+    .status-line,
+    .summary {
+      color: var(--clr-text-muted);
+      font-size: 0.75rem;
+    }
+
+    input[type="file"],
+    input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-sm);
+      background: var(--clr-surface-2);
+      color: var(--clr-text);
+      font: inherit;
+      font-size: 0.8125rem;
+      transition: border-color var(--dur-fast) var(--ease-out),
+                  box-shadow var(--dur-fast) var(--ease-out);
+    }
+
+    input[type="file"]:focus,
+    input[type="number"]:focus {
+      outline: none;
+      border-color: var(--clr-accent);
+      box-shadow: 0 0 0 3px var(--clr-accent-bg);
+    }
+
+    input[type="file"]::file-selector-button {
+      margin-right: 12px;
+      padding: 6px 12px;
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-sm);
+      background: var(--clr-surface);
+      color: var(--clr-text);
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    input[type="file"]::file-selector-button:hover {
+      border-color: var(--clr-accent);
+      color: var(--clr-accent);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--clr-accent), hsl(190, 65%, 45%));
+      color: hsl(225, 30%, 8%);
+      font-family: var(--ff-sans);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px var(--clr-accent-glow);
+      transition: transform var(--dur-fast) var(--ease-out),
+                  box-shadow var(--dur-fast) var(--ease-out),
+                  filter var(--dur-fast) var(--ease-out),
+                  background var(--dur-fast) var(--ease-out),
+                  opacity var(--dur-fast) var(--ease-out);
+    }
+
+    button.secondary,
+    button.ghost {
+      background: var(--clr-surface-2);
+      color: var(--clr-text);
+      border: 1px solid var(--clr-border);
+      box-shadow: none;
+    }
+
+    button:hover:enabled {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px var(--clr-accent-glow);
+      filter: brightness(1.1);
+    }
+
+    button.secondary:hover:enabled,
+    button.ghost:hover:enabled {
+      border-color: var(--clr-accent);
+      color: var(--clr-accent);
+      filter: none;
+      box-shadow: none;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 2px;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    progress {
+      width: 100%;
+      height: 8px;
+      margin: 12px 0 6px;
+      border: none;
+      border-radius: 999px;
+      accent-color: var(--clr-accent);
+      background: var(--clr-surface-2);
+    }
+
+    progress::-webkit-progress-bar {
+      border-radius: 999px;
+      background: var(--clr-surface-2);
+    }
+
+    progress::-webkit-progress-value {
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--clr-accent), hsl(190, 65%, 45%));
+    }
+
+    .summary {
+      min-height: 1.5em;
+      margin-top: 10px;
+    }
+
+    .status {
+      margin-top: 18px;
+      padding: 16px;
+      border: 1px solid var(--clr-border-subtle);
+      border-radius: var(--radius-md);
+      background: hsl(225, 30%, 4%);
+      color: var(--clr-text);
+      min-height: 260px;
+      font-family: var(--ff-mono);
+      font-size: 0.75rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--clr-border) transparent;
+    }
+
+    .danger {
+      color: var(--clr-danger);
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--clr-text-muted);
+      font-size: 0.8125rem;
+      line-height: 1.6;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--clr-surface-2);
+      color: var(--clr-accent);
+      font-family: var(--ff-mono);
+      font-size: 0.9em;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button, .home-link, input { transition: none; }
+      button:hover:enabled { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow--1"></div>
+  <div class="bg-glow bg-glow--2"></div>
+
+  <main class="shell">
+    <a class="home-link" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Home
+    </a>
+    <h1>STM DFU Firmware Updater</h1>
+    <p class="lede">
+      Single-file WebUSB updater for STM DFU devices and ST DfuSe <code>.dfu</code> firmware images.
+      Use a Chromium-based browser over <code>https://</code> or <code>http://localhost</code>, then put the target board into DFU mode before connecting.
+    </p>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Firmware</h2>
+        <div class="field">
+          <label for="firmwareFile">DfuSe image</label>
+          <input id="firmwareFile" type="file" accept=".dfu,application/octet-stream">
+        </div>
+        <div class="field">
+          <label for="transferSize">Transfer size</label>
+          <input id="transferSize" type="number" min="64" step="64" value="2048">
+          <div class="hint">The app tries to read the DFU functional descriptor after connect. Use this only as an override.</div>
+        </div>
+        <div class="field">
+          <label for="memoryDescriptor">Memory map override</label>
+          <input id="memoryDescriptor" type="text" placeholder="@Internal Flash  /0x08000000/128*002Kg">
+          <div class="hint">Optional. Use this when the STM bootloader does not expose its DfuSe memory descriptor.</div>
+        </div>
+        <div id="firmwareSummary" class="summary">No firmware loaded.</div>
+      </article>
+
+      <article class="card">
+        <h2>Device</h2>
+        <div id="deviceSummary" class="summary">No DFU device selected.</div>
+        <progress id="progressBar" max="100" value="0"></progress>
+        <div id="progressLabel" class="status-line">Idle.</div>
+        <div class="actions">
+          <button id="connectButton" type="button">Connect Device</button>
+          <button id="flashButton" type="button" disabled>Flash Firmware</button>
+          <button id="installButton" type="button" class="ghost" hidden>Install Locally</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Notes</h2>
+        <ul>
+          <li>The selected USB interface must expose DFU class <code>0xfe/0x01</code>. STM DfuSe mode commonly uses protocol <code>0x02</code>.</li>
+          <li>The app parses the DfuSe target table and writes each element to its declared flash address.</li>
+          <li>If the device disconnects after manifestation, that is normal for many STM bootloaders.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section id="statusLog" class="status" aria-live="polite"></section>
+  </main>
+
+  <script>
+    const DFU = {
+      requests: {
+        detach: 0x00,
+        download: 0x01,
+        upload: 0x02,
+        getStatus: 0x03,
+        clearStatus: 0x04,
+        getState: 0x05,
+        abort: 0x06,
+      },
+      states: {
+        appIdle: 0x00,
+        appDetach: 0x01,
+        dfuIdle: 0x02,
+        dfuDnloadSync: 0x03,
+        dfuDnBusy: 0x04,
+        dfuDnloadIdle: 0x05,
+        dfuManifestSync: 0x06,
+        dfuManifest: 0x07,
+        dfuManifestWaitReset: 0x08,
+        dfuUploadIdle: 0x09,
+        dfuError: 0x0a,
+      },
+      status: {
+        ok: 0x00,
+      },
+      dfuse: {
+        setAddress: 0x21,
+        eraseSector: 0x41,
+      },
+    };
+
+    const elements = {
+      firmwareFile: document.getElementById("firmwareFile"),
+      transferSize: document.getElementById("transferSize"),
+      memoryDescriptor: document.getElementById("memoryDescriptor"),
+      firmwareSummary: document.getElementById("firmwareSummary"),
+      deviceSummary: document.getElementById("deviceSummary"),
+      progressBar: document.getElementById("progressBar"),
+      progressLabel: document.getElementById("progressLabel"),
+      statusLog: document.getElementById("statusLog"),
+      connectButton: document.getElementById("connectButton"),
+      flashButton: document.getElementById("flashButton"),
+      installButton: document.getElementById("installButton"),
+    };
+
+    const appState = {
+      firmware: null,
+      device: null,
+      dfu: null,
+      interfaceInfo: null,
+      alternates: [],
+      hasConnectedOnce: false,
+      deferredInstallPrompt: null,
+    };
+
+    const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    function log(message, kind = "info") {
+      const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+      elements.statusLog.textContent += `${line}\n`;
+      elements.statusLog.scrollTop = elements.statusLog.scrollHeight;
+      if (kind === "error") {
+        elements.progressLabel.innerHTML = `<span class="danger">${message}</span>`;
+      }
+    }
+
+    function setProgress(sent, total, label) {
+      const percent = total > 0 ? Math.min(100, Math.round((sent / total) * 100)) : 0;
+      elements.progressBar.value = percent;
+      elements.progressLabel.textContent = `${label} ${percent}% (${sent}/${total} bytes)`;
+    }
+
+    function setBusy(isBusy) {
+      const readyToFlash = Boolean(appState.firmware && appState.dfu && !isBusy);
+      elements.connectButton.disabled = isBusy;
+      elements.flashButton.disabled = !readyToFlash;
+      elements.firmwareFile.disabled = isBusy;
+      elements.transferSize.disabled = isBusy;
+      elements.memoryDescriptor.disabled = isBusy;
+    }
+
+    function updateConnectButtonLabel() {
+      if (appState.dfu) {
+        elements.connectButton.textContent = "Connected";
+        return;
+      }
+      elements.connectButton.textContent = appState.hasConnectedOnce ? "Reconnect Device" : "Connect Device";
+    }
+
+    function updateInstallButton() {
+      elements.installButton.hidden = !appState.deferredInstallPrompt;
+    }
+
+    function updateFirmwareSummary() {
+      if (!appState.firmware) {
+        elements.firmwareSummary.textContent = "No firmware loaded.";
+        return;
+      }
+      const { fileName, totalBytes, targets, suffix } = appState.firmware;
+      const elementCount = targets.reduce((count, target) => count + target.elements.length, 0);
+      const suffixText = suffix ? `, suffix VID:PID ${hex16(suffix.idVendor)}:${hex16(suffix.idProduct)}` : "";
+      elements.firmwareSummary.textContent = `${fileName}: ${totalBytes} bytes, ${targets.length} target(s), ${elementCount} element(s)${suffixText}`;
+    }
+
+    function updateDeviceSummary() {
+      if (!appState.dfu || !appState.device || !appState.interfaceInfo) {
+        elements.deviceSummary.textContent = "No DFU device selected.";
+        return;
+      }
+      const { interfaceNumber, alternateSetting, protocol, interfaceName, transferSize } = appState.interfaceInfo;
+      const descriptor = interfaceName ? `, ${interfaceName}` : "";
+      elements.deviceSummary.textContent = `${appState.device.productName || "USB Device"} on interface ${interfaceNumber}, alt ${alternateSetting}, protocol 0x${protocol.toString(16)}, transfer ${transferSize} bytes${descriptor}`;
+    }
+
+    function enrichAlternateInfo(alternate, transferSize, functionalDescriptor) {
+      let memoryInfo = null;
+      if ((alternate.interfaceName || "").startsWith("@")) {
+        memoryInfo = parseMemoryDescriptor(alternate.interfaceName);
+      }
+      return {
+        ...alternate,
+        transferSize,
+        memoryInfo,
+        functionalDescriptor,
+      };
+    }
+
+    function getManualMemoryInfo() {
+      const descriptor = elements.memoryDescriptor.value.trim();
+      if (!descriptor) {
+        return null;
+      }
+      return parseMemoryDescriptor(descriptor);
+    }
+
+    function hex16(value) {
+      return value.toString(16).padStart(4, "0");
+    }
+
+    function parseDfuSuffix(view) {
+      if (view.byteLength < 16) {
+        return null;
+      }
+      const offset = view.byteLength - 16;
+      const signature = String.fromCharCode(view.getUint8(offset + 8), view.getUint8(offset + 9), view.getUint8(offset + 10));
+      const length = view.getUint8(offset + 11);
+      if (signature !== "UFD" || length !== 16) {
+        return null;
+      }
+      return {
+        idVendor: view.getUint16(offset + 4, true),
+        idProduct: view.getUint16(offset + 2, true),
+        bcdDevice: view.getUint16(offset + 0, true),
+        bcdDfu: view.getUint16(offset + 6, true),
+        crc: view.getUint32(offset + 12, true),
+      };
+    }
+
+    function parseDfuSeFile(buffer, fileName) {
+      const view = new DataView(buffer);
+      const signature = new TextDecoder().decode(buffer.slice(0, 5));
+      if (signature !== "DfuSe") {
+        throw new Error("Expected an ST DfuSe .dfu file starting with 'DfuSe'.");
+      }
+
+      const version = view.getUint8(5);
+      const imageSize = view.getUint32(6, true);
+      const targetCount = view.getUint8(10);
+      const suffix = parseDfuSuffix(view);
+      const parserEnd = suffix ? buffer.byteLength - 16 : buffer.byteLength;
+      let offset = 11;
+      const targets = [];
+
+      for (let targetIndex = 0; targetIndex < targetCount; targetIndex += 1) {
+        const targetSignature = new TextDecoder().decode(buffer.slice(offset, offset + 6));
+        if (targetSignature !== "Target") {
+          throw new Error(`Invalid target signature at offset ${offset}.`);
+        }
+        const altSetting = view.getUint8(offset + 6);
+        const named = view.getUint8(offset + 7) !== 0;
+        const rawName = new TextDecoder().decode(buffer.slice(offset + 11, offset + 266));
+        const name = named ? rawName.replace(/\0+$/, "").trim() : `Target ${targetIndex}`;
+        const targetSize = view.getUint32(offset + 266, true);
+        const elementCount = view.getUint32(offset + 270, true);
+        let elementOffset = offset + 274;
+        const elementsForTarget = [];
+
+        for (let elementIndex = 0; elementIndex < elementCount; elementIndex += 1) {
+          const address = view.getUint32(elementOffset, true);
+          const size = view.getUint32(elementOffset + 4, true);
+          const dataStart = elementOffset + 8;
+          const dataEnd = dataStart + size;
+          if (dataEnd > parserEnd) {
+            throw new Error("DFU element exceeds file length.");
+          }
+          elementsForTarget.push({
+            address,
+            size,
+            data: new Uint8Array(buffer.slice(dataStart, dataEnd)),
+          });
+          elementOffset = dataEnd;
+        }
+
+        targets.push({
+          name,
+          altSetting,
+          size: targetSize,
+          elements: elementsForTarget,
+        });
+        offset = elementOffset;
+      }
+
+      if (offset !== parserEnd) {
+        throw new Error("Unexpected trailing bytes in DfuSe image.");
+      }
+      if (imageSize !== buffer.byteLength - 11) {
+        log(`DfuSe header size is ${imageSize} bytes; actual payload is ${buffer.byteLength - 11} bytes.`, "info");
+      }
+
+      return {
+        fileName,
+        version,
+        totalBytes: buffer.byteLength,
+        targets,
+        suffix,
+      };
+    }
+
+    function parseMemoryDescriptor(text) {
+      const slashIndex = text.indexOf("/");
+      if (!text.startsWith("@") || slashIndex === -1) {
+        throw new Error(`Not a DfuSe memory descriptor: ${text}`);
+      }
+      const name = text.slice(1, slashIndex).trim();
+      const tail = text.slice(slashIndex);
+      const segments = [];
+      const sizeUnits = { " ": 1, B: 1, K: 1024, M: 1024 * 1024 };
+      const regionRegex = /\/\s*(0x[0-9a-fA-F]{1,8})\s*\/((?:\s*\d+\s*\*\s*\d+\s?[ BKM]\s*[a-g]\s*,?\s*)+)/g;
+      const sectorRegex = /(\d+)\s*\*\s*(\d+)\s?([ BKM])\s*([a-g])\s*,?\s*/g;
+
+      let regionMatch;
+      while ((regionMatch = regionRegex.exec(tail)) !== null) {
+        let startAddress = Number.parseInt(regionMatch[1], 16);
+        let sectorMatch;
+        while ((sectorMatch = sectorRegex.exec(regionMatch[2])) !== null) {
+          const sectorCount = Number.parseInt(sectorMatch[1], 10);
+          const sectorSize = Number.parseInt(sectorMatch[2], 10) * sizeUnits[sectorMatch[3]];
+          const properties = sectorMatch[4].charCodeAt(0) - "a".charCodeAt(0) + 1;
+          const segment = {
+            start: startAddress,
+            sectorSize,
+            end: startAddress + sectorCount * sectorSize,
+            readable: (properties & 0x1) !== 0,
+            erasable: (properties & 0x2) !== 0,
+            writable: (properties & 0x4) !== 0,
+          };
+          segments.push(segment);
+          startAddress = segment.end;
+        }
+      }
+
+      return { name, segments };
+    }
+
+    function findDfuAlternates(device) {
+      const matches = [];
+      for (const [configurationIndex, configuration] of (device.configurations || []).entries()) {
+        for (const iface of configuration.interfaces) {
+          for (const alternate of iface.alternates) {
+            if (alternate.interfaceClass === 0xfe && alternate.interfaceSubclass === 0x01) {
+              matches.push({
+                configurationIndex,
+                configurationValue: configuration.configurationValue,
+                interfaceNumber: iface.interfaceNumber,
+                alternateSetting: alternate.alternateSetting,
+                protocol: alternate.interfaceProtocol,
+                interfaceName: alternate.interfaceName || "",
+              });
+            }
+          }
+        }
+      }
+      return matches.sort((left, right) => {
+        const leftScore = left.protocol === 0x02 ? 0 : 1;
+        const rightScore = right.protocol === 0x02 ? 0 : 1;
+        return leftScore - rightScore;
+      });
+    }
+
+    async function readConfigurationDescriptor(device, configurationIndex) {
+      const headerResponse = await device.controlTransferIn({
+        requestType: "standard",
+        recipient: "device",
+        request: 0x06,
+        value: (0x02 << 8) | configurationIndex,
+        index: 0,
+      }, 9);
+      if (headerResponse.status !== "ok" || !headerResponse.data) {
+        throw new Error("Unable to read the USB configuration descriptor header.");
+      }
+      const totalLength = headerResponse.data.getUint16(2, true);
+      const response = await device.controlTransferIn({
+        requestType: "standard",
+        recipient: "device",
+        request: 0x06,
+        value: (0x02 << 8) | configurationIndex,
+        index: 0,
+      }, totalLength);
+      if (response.status !== "ok" || !response.data) {
+        throw new Error("Unable to read the USB configuration descriptor.");
+      }
+      return response.data.buffer.slice(0);
+    }
+
+    function parseInterfaceDescriptorMap(buffer) {
+      const view = new DataView(buffer);
+      const map = new Map();
+      let offset = 0;
+
+      while (offset + 2 <= view.byteLength) {
+        const length = view.getUint8(offset);
+        const type = view.getUint8(offset + 1);
+        if (length < 2) {
+          break;
+        }
+        if (type === 0x04 && length >= 9) {
+          const interfaceNumber = view.getUint8(offset + 2);
+          const alternateSetting = view.getUint8(offset + 3);
+          const iInterface = view.getUint8(offset + 8);
+          map.set(`${interfaceNumber}:${alternateSetting}`, iInterface);
+        }
+        offset += length;
+      }
+
+      return map;
+    }
+
+    async function readStringDescriptor(device, descriptorIndex, languageId) {
+      const setup = {
+        requestType: "standard",
+        recipient: "device",
+        request: 0x06,
+        value: (0x03 << 8) | descriptorIndex,
+        index: languageId,
+      };
+      const lengthResponse = await device.controlTransferIn(setup, 1);
+      if (lengthResponse.status !== "ok" || !lengthResponse.data) {
+        throw new Error(`Unable to read string descriptor ${descriptorIndex}.`);
+      }
+      const descriptorLength = lengthResponse.data.getUint8(0);
+      const response = await device.controlTransferIn(setup, descriptorLength);
+      if (response.status !== "ok" || !response.data) {
+        throw new Error(`Unable to read string descriptor ${descriptorIndex}.`);
+      }
+      if (languageId === 0) {
+        const languages = [];
+        for (let offset = 2; offset < descriptorLength; offset += 2) {
+          languages.push(response.data.getUint16(offset, true));
+        }
+        return languages;
+      }
+      let text = "";
+      for (let offset = 2; offset < descriptorLength; offset += 2) {
+        text += String.fromCharCode(response.data.getUint16(offset, true));
+      }
+      return text;
+    }
+
+    async function resolveInterfaceNames(device, configurationIndex) {
+      const configBuffer = await readConfigurationDescriptor(device, configurationIndex);
+      const descriptorMap = parseInterfaceDescriptorMap(configBuffer);
+      const languageIds = await readStringDescriptor(device, 0, 0);
+      const languageId = languageIds[0] || 0x0409;
+      const names = new Map();
+
+      for (const [key, stringIndex] of descriptorMap.entries()) {
+        if (stringIndex === 0) {
+          continue;
+        }
+        try {
+          names.set(key, await readStringDescriptor(device, stringIndex, languageId));
+        } catch (error) {
+          log(`Interface string ${stringIndex} unavailable: ${error.message}`);
+        }
+      }
+
+      return { configBuffer, names };
+    }
+
+    function extractDfuFunctionalDescriptor(buffer, interfaceNumber, alternateSetting) {
+      const view = new DataView(buffer);
+      let offset = 0;
+      let activeInterface = null;
+
+      while (offset + 2 <= view.byteLength) {
+        const length = view.getUint8(offset);
+        const type = view.getUint8(offset + 1);
+        if (length < 2) {
+          break;
+        }
+
+        if (type === 0x04 && length >= 9) {
+          activeInterface = {
+            interfaceNumber: view.getUint8(offset + 2),
+            alternateSetting: view.getUint8(offset + 3),
+          };
+        }
+
+        if (
+          type === 0x21 &&
+          length >= 9 &&
+          activeInterface &&
+          activeInterface.interfaceNumber === interfaceNumber &&
+          activeInterface.alternateSetting === alternateSetting
+        ) {
+          return {
+            attributes: view.getUint8(offset + 2),
+            detachTimeout: view.getUint16(offset + 3, true),
+            transferSize: view.getUint16(offset + 5, true),
+            version: view.getUint16(offset + 7, true),
+          };
+        }
+
+        offset += length;
+      }
+
+      return null;
+    }
+
+    class DfuDevice {
+      constructor(device, interfaceInfo) {
+        this.device = device;
+        this.setInterfaceInfo(interfaceInfo);
+      }
+
+      setInterfaceInfo(interfaceInfo) {
+        this.interfaceNumber = interfaceInfo.interfaceNumber;
+        this.alternateSetting = interfaceInfo.alternateSetting;
+        this.protocol = interfaceInfo.protocol;
+        this.interfaceName = interfaceInfo.interfaceName;
+        this.transferSize = interfaceInfo.transferSize;
+        this.memoryInfo = interfaceInfo.memoryInfo;
+      }
+
+      async controlIn(request, value, length) {
+        const response = await this.device.controlTransferIn({
+          requestType: "class",
+          recipient: "interface",
+          request,
+          value,
+          index: this.interfaceNumber,
+        }, length);
+        if (response.status !== "ok" || !response.data) {
+          throw new Error(`USB control IN request 0x${request.toString(16)} failed.`);
+        }
+        return response.data;
+      }
+
+      async controlOut(request, value, data) {
+        const payload = data instanceof ArrayBuffer ? data : data.buffer;
+        const response = await this.device.controlTransferOut({
+          requestType: "class",
+          recipient: "interface",
+          request,
+          value,
+          index: this.interfaceNumber,
+        }, payload);
+        if (response.status !== "ok") {
+          throw new Error(`USB control OUT request 0x${request.toString(16)} failed.`);
+        }
+        return response.bytesWritten ?? 0;
+      }
+
+      async getState() {
+        const data = await this.controlIn(DFU.requests.getState, 0, 1);
+        return data.getUint8(0);
+      }
+
+      async getStatus() {
+        const data = await this.controlIn(DFU.requests.getStatus, 0, 6);
+        return {
+          status: data.getUint8(0),
+          pollTimeout: data.getUint8(1) | (data.getUint8(2) << 8) | (data.getUint8(3) << 16),
+          state: data.getUint8(4),
+          stringIndex: data.getUint8(5),
+        };
+      }
+
+      async clearStatus() {
+        await this.controlOut(DFU.requests.clearStatus, 0, new ArrayBuffer(0));
+      }
+
+      async abort() {
+        await this.controlOut(DFU.requests.abort, 0, new ArrayBuffer(0));
+      }
+
+      async download(data, blockNumber) {
+        const payload = data instanceof Uint8Array ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data;
+        return this.controlOut(DFU.requests.download, blockNumber, payload);
+      }
+
+      async pollUntilStable() {
+        while (true) {
+          const status = await this.getStatus();
+          if (
+            status.state === DFU.states.dfuDnBusy ||
+            status.state === DFU.states.dfuDnloadSync ||
+            status.state === DFU.states.dfuManifestSync
+          ) {
+            await sleep(Math.max(5, status.pollTimeout));
+            continue;
+          }
+          return status;
+        }
+      }
+
+      async ensureIdle() {
+        let state = await this.getState();
+        if (state === DFU.states.dfuError) {
+          await this.clearStatus();
+          state = await this.getState();
+        }
+        if (state === DFU.states.dfuDnloadIdle || state === DFU.states.dfuUploadIdle) {
+          await this.abort();
+          state = await this.getState();
+        }
+        if (state !== DFU.states.dfuIdle) {
+          const status = await this.pollUntilStable();
+          if (status.state === DFU.states.dfuError) {
+            await this.clearStatus();
+          } else if (status.state === DFU.states.dfuDnloadIdle || status.state === DFU.states.dfuUploadIdle) {
+            await this.abort();
+          }
+        }
+      }
+
+      async dfuseCommand(command, parameter, length = 4) {
+        const payload = new ArrayBuffer(length + 1);
+        const view = new DataView(payload);
+        view.setUint8(0, command);
+        if (length === 1) {
+          view.setUint8(1, parameter);
+        } else {
+          view.setUint32(1, parameter, true);
+        }
+        await this.download(payload, 0);
+        const status = await this.pollUntilStable();
+        if (status.status !== DFU.status.ok) {
+          throw new Error(`DfuSe command 0x${command.toString(16)} failed with status ${status.status}.`);
+        }
+      }
+
+      getSegment(address) {
+        if (!this.memoryInfo?.segments?.length) {
+          throw new Error("The selected DFU interface does not expose a writable memory map.");
+        }
+        return this.memoryInfo.segments.find((segment) => segment.start <= address && address < segment.end) || null;
+      }
+
+      getSectorStart(address, segment = this.getSegment(address)) {
+        if (!segment) {
+          throw new Error(`Address 0x${address.toString(16)} is outside the memory map.`);
+        }
+        const sectorIndex = Math.floor((address - segment.start) / segment.sectorSize);
+        return segment.start + sectorIndex * segment.sectorSize;
+      }
+
+      getSectorEnd(address, segment = this.getSegment(address)) {
+        if (!segment) {
+          throw new Error(`Address 0x${address.toString(16)} is outside the memory map.`);
+        }
+        const sectorIndex = Math.floor((address - segment.start) / segment.sectorSize);
+        return segment.start + (sectorIndex + 1) * segment.sectorSize;
+      }
+
+      getSectorKey(address) {
+        const segment = this.getSegment(address);
+        const sectorStart = this.getSectorStart(address, segment);
+        return `${this.alternateSetting}:${sectorStart.toString(16)}`;
+      }
+
+      async eraseRange(address, length, progressBase, progressTotal, erasedSectors) {
+        let segment = this.getSegment(address);
+        let current = this.getSectorStart(address, segment);
+        const end = this.getSectorEnd(address + length - 1);
+        while (current < end) {
+          if (segment.end <= current) {
+            segment = this.getSegment(current);
+          }
+          if (!segment.erasable) {
+            current = segment.end;
+            continue;
+          }
+          const sectorKey = `${this.alternateSetting}:${current.toString(16)}`;
+          if (!erasedSectors.has(sectorKey)) {
+            log(`Erasing sector at 0x${current.toString(16)}`);
+            await this.dfuseCommand(DFU.dfuse.eraseSector, current, 4);
+            erasedSectors.add(sectorKey);
+            const erased = Math.min(progressTotal, progressBase + (current - address) + segment.sectorSize);
+            setProgress(erased, progressTotal, "Erasing");
+          }
+          current += segment.sectorSize;
+        }
+      }
+
+      async writeElement(element, progressState, erasedSectors) {
+        log(`Writing ${element.size} bytes to 0x${element.address.toString(16)}`);
+        await this.eraseRange(element.address, element.size, progressState.completed, progressState.total, erasedSectors);
+        let offset = 0;
+        while (offset < element.size) {
+          const chunkSize = Math.min(this.transferSize, element.size - offset);
+          const chunk = element.data.slice(offset, offset + chunkSize);
+          const address = element.address + offset;
+          await this.dfuseCommand(DFU.dfuse.setAddress, address, 4);
+          await this.download(chunk, 2);
+          const status = await this.pollUntilStable();
+          if (status.status !== DFU.status.ok || status.state !== DFU.states.dfuDnloadIdle) {
+            throw new Error(`Download failed at 0x${address.toString(16)} with state ${status.state} and status ${status.status}.`);
+          }
+          offset += chunk.byteLength;
+          setProgress(progressState.completed + offset, progressState.total, "Flashing");
+        }
+        progressState.completed += element.size;
+      }
+
+      async manifest(startAddress) {
+        await this.dfuseCommand(DFU.dfuse.setAddress, startAddress, 4);
+        await this.download(new ArrayBuffer(0), 0);
+        const status = await this.pollUntilStable();
+        if (![DFU.states.dfuManifest, DFU.states.dfuManifestWaitReset, DFU.states.dfuIdle].includes(status.state)) {
+          throw new Error(`Unexpected manifestation state ${status.state}.`);
+        }
+      }
+    }
+
+    async function connectDevice() {
+      if (!navigator.usb) {
+        throw new Error("This browser does not support WebUSB. Use a Chromium-based browser.");
+      }
+
+      const device = await navigator.usb.requestDevice({
+        filters: [
+          { vendorId: 0x0483 },
+          { classCode: 0xfe, subclassCode: 0x01 },
+        ],
+      });
+
+      const matches = findDfuAlternates(device);
+      if (!matches.length) {
+        throw new Error("The selected USB device does not expose a DFU interface.");
+      }
+
+      const selected = matches[0];
+      await device.open();
+      if (device.configuration?.configurationValue !== selected.configurationValue) {
+        await device.selectConfiguration(selected.configurationValue);
+      }
+      await device.claimInterface(selected.interfaceNumber);
+      await device.selectAlternateInterface(selected.interfaceNumber, selected.alternateSetting);
+
+      let transferSize = Number.parseInt(elements.transferSize.value, 10);
+      let functionalDescriptor = null;
+      let configBuffer = null;
+      let resolvedNames = new Map();
+      try {
+        const resolved = await resolveInterfaceNames(device, selected.configurationIndex);
+        configBuffer = resolved.configBuffer;
+        resolvedNames = resolved.names;
+        functionalDescriptor = extractDfuFunctionalDescriptor(configBuffer, selected.interfaceNumber, selected.alternateSetting);
+        if (functionalDescriptor?.transferSize) {
+          transferSize = functionalDescriptor.transferSize;
+          elements.transferSize.value = String(transferSize);
+        }
+      } catch (error) {
+        log(`Descriptor read skipped: ${error.message}`);
+      }
+
+      const alternateInfos = matches.map((alternate) => {
+        const key = `${alternate.interfaceNumber}:${alternate.alternateSetting}`;
+        const resolvedName = resolvedNames.get(key);
+        return enrichAlternateInfo({
+          ...alternate,
+          interfaceName: resolvedName || alternate.interfaceName || "",
+        }, transferSize, null);
+      });
+      const selectedKey = `${selected.interfaceNumber}:${selected.alternateSetting}`;
+      const selectedMatch = alternateInfos.find((alternate) => `${alternate.interfaceNumber}:${alternate.alternateSetting}` === selectedKey);
+      const manualMemoryInfo = getManualMemoryInfo();
+      const interfaceInfo = {
+        ...selectedMatch,
+        memoryInfo: selectedMatch.memoryInfo || manualMemoryInfo,
+        functionalDescriptor,
+      };
+      const dfu = new DfuDevice(device, interfaceInfo);
+      await dfu.ensureIdle();
+
+      appState.device = device;
+      appState.dfu = dfu;
+      appState.interfaceInfo = interfaceInfo;
+      appState.alternates = alternateInfos.map((alternate) => ({
+        ...alternate,
+        memoryInfo: alternate.memoryInfo || manualMemoryInfo,
+      }));
+      appState.hasConnectedOnce = true;
+      updateConnectButtonLabel();
+      updateDeviceSummary();
+      log(`Connected to ${device.manufacturerName || "USB"} ${device.productName || "device"}.`);
+      if (interfaceInfo.memoryInfo) {
+        log(`Memory map: ${interfaceInfo.memoryInfo.name}`);
+      } else {
+        log("The DFU interface did not expose a DfuSe memory descriptor.");
+      }
+      setBusy(false);
+    }
+
+    async function switchAlternate(targetAltSetting) {
+      if (!appState.device || !appState.dfu || !appState.interfaceInfo) {
+        throw new Error("No DFU device selected.");
+      }
+      if (appState.interfaceInfo.alternateSetting === targetAltSetting) {
+        return;
+      }
+      const nextAlternate = appState.alternates.find((alternate) => alternate.alternateSetting === targetAltSetting);
+      if (!nextAlternate) {
+        throw new Error(`The device does not expose alternate setting ${targetAltSetting}.`);
+      }
+      await appState.device.selectAlternateInterface(appState.interfaceInfo.interfaceNumber, targetAltSetting);
+      appState.interfaceInfo = nextAlternate;
+      appState.dfu.setInterfaceInfo(nextAlternate);
+      await appState.dfu.ensureIdle();
+      updateDeviceSummary();
+      log(`Switched to alternate setting ${targetAltSetting}.`);
+    }
+
+    function isExpectedDisconnectError(error) {
+      return Boolean(error?.message && error.message.includes("device was disconnected"));
+    }
+
+    async function releaseDevice() {
+      if (!appState.device || !appState.interfaceInfo) {
+        return;
+      }
+      let disconnectedDuringRelease = false;
+      try {
+        await appState.device.releaseInterface(appState.interfaceInfo.interfaceNumber);
+      } catch (error) {
+        if (isExpectedDisconnectError(error)) {
+          disconnectedDuringRelease = true;
+        } else {
+          log(`Release skipped: ${error.message}`);
+        }
+      }
+      try {
+        await appState.device.close();
+      } catch (error) {
+        if (isExpectedDisconnectError(error)) {
+          disconnectedDuringRelease = true;
+        } else {
+          log(`Close skipped: ${error.message}`);
+        }
+      }
+      appState.device = null;
+      appState.dfu = null;
+      appState.interfaceInfo = null;
+      appState.alternates = [];
+      updateConnectButtonLabel();
+      updateDeviceSummary();
+      setBusy(false);
+      if (disconnectedDuringRelease) {
+        log("Device disconnected after manifestation.");
+      }
+      log("Device released.");
+    }
+
+    async function handleFirmwareSelection() {
+      const file = elements.firmwareFile.files?.[0];
+      if (!file) {
+        appState.firmware = null;
+        updateFirmwareSummary();
+        setBusy(false);
+        return;
+      }
+
+      const buffer = await file.arrayBuffer();
+      appState.firmware = parseDfuSeFile(buffer, file.name);
+      updateFirmwareSummary();
+      log(`Loaded firmware ${file.name}.`);
+      setBusy(false);
+    }
+
+    async function flashFirmware() {
+      if (!appState.firmware || !appState.dfu) {
+        throw new Error("Select a firmware file and connect a DFU device first.");
+      }
+      const targets = appState.firmware.targets;
+      const total = targets.reduce((sum, target) => sum + target.elements.reduce((inner, element) => inner + element.size, 0), 0);
+      if (total === 0) {
+        throw new Error("The selected firmware does not contain any writable elements.");
+      }
+
+      const progressState = { completed: 0, total };
+      const erasedSectors = new Set();
+      setProgress(0, total, "Preparing");
+      await appState.dfu.ensureIdle();
+
+      for (const target of targets) {
+        log(`Flashing target '${target.name}' on alternate setting ${target.altSetting}.`);
+        await switchAlternate(target.altSetting);
+        for (const element of target.elements) {
+          await appState.dfu.writeElement(element, progressState, erasedSectors);
+        }
+      }
+
+      const firstElement = targets.find((target) => target.altSetting === appState.interfaceInfo.alternateSetting)?.elements[0];
+      if (!firstElement) {
+        throw new Error("No writable element matched the selected DFU alternate setting.");
+      }
+      log("Manifesting firmware.");
+      await appState.dfu.manifest(firstElement.address);
+      setProgress(total, total, "Complete");
+      log("Firmware update completed.");
+    }
+
+    async function installLocally() {
+      if (!appState.deferredInstallPrompt) {
+        log("Install prompt is not available yet. Use Chromium over https or localhost.");
+        return;
+      }
+
+      const installPrompt = appState.deferredInstallPrompt;
+      appState.deferredInstallPrompt = null;
+      updateInstallButton();
+      await installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+      if (result.outcome === "accepted") {
+        log("Local install accepted.");
+      } else {
+        log("Local install dismissed.");
+      }
+    }
+
+    elements.firmwareFile.addEventListener("change", async () => {
+      try {
+        await handleFirmwareSelection();
+      } catch (error) {
+        appState.firmware = null;
+        updateFirmwareSummary();
+        log(error.message, "error");
+      }
+    });
+
+    elements.connectButton.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        await connectDevice();
+      } catch (error) {
+        log(error.message, "error");
+        await releaseDevice();
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    elements.flashButton.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        await flashFirmware();
+        await releaseDevice();
+      } catch (error) {
+        log(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    elements.installButton.addEventListener("click", async () => {
+      try {
+        await installLocally();
+      } catch (error) {
+        log(error.message, "error");
+      }
+    });
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      appState.deferredInstallPrompt = event;
+      updateInstallButton();
+      log("Install is available. Use 'Install Locally' to add the app.");
+    });
+
+    window.addEventListener("appinstalled", () => {
+      appState.deferredInstallPrompt = null;
+      updateInstallButton();
+      log("App installed locally.");
+    });
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js").catch((error) => {
+          log(`Service worker registration failed: ${error.message}`);
+        });
+      });
+    }
+
+    log("Ready. Load an ST DfuSe .dfu image, then connect a device in DFU mode.");
+    updateConnectButtonLabel();
+    updateInstallButton();
+    setBusy(false);
+  </script>
+</body>
+</html>
