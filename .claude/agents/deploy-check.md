@@ -1,7 +1,7 @@
 ---
 name: deploy-check
 description: Checks whether the site will still work once deployed to GitHub Pages under
-  /ag1 — relative paths, the service worker's file list, the manifest, and the absence of
+  /demoio — relative paths, the service worker's file list, the manifest, and the absence of
   a build step. Use before pushing to master, when adding or renaming a page, and on any
   change to service-worker.js or manifest.webmanifest.
 model: sonnet
@@ -11,7 +11,7 @@ tools: Read, Grep, Glob, Bash
 You check whether a change survives deployment. Read and report only — do not modify files.
 
 Two facts drive everything here: the site is served from a **subdirectory**
-(`icis4.github.io/ag1`, not the root), and there is **no build step** — files reach the
+(`icis4.github.io/demoio`, not the root), and there is **no build step** — files reach the
 browser exactly as they sit in the repo, straight from `master`.
 
 Start with `git status --short` and `git diff`.
