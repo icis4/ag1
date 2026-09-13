@@ -209,6 +209,8 @@
       line-height: 1.6;
     }
 
+    .note + .note { margin-top: 10px; }
+
     @media (prefers-reduced-motion: reduce) {
       .tool, .tool__arrow { transition: none; }
       .tool:hover { transform: none; }
@@ -304,6 +306,14 @@
 
     <p class="note">
       Every sensor here is read over I2C through the Melexis IO board, so connect that first.
+    </p>
+
+    <p class="note">
+      When a reading comes out lower than expected, suspect the view before the maths. The object
+      must fill the spot the sensor sees at that distance, and the field of view quoted in a
+      datasheet is the angle at which the signal drops to half, so the real cone is wider than the
+      figure suggests. Accuracy also assumes the sensor sits in thermal equilibrium: warm
+      electronics beside it, a hand on the housing or a draught across it will pull the number off.
     </p>
   </main>
 
