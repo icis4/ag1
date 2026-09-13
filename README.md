@@ -1,7 +1,7 @@
 # Melexis IO Tools
 
-Browser utilities for the STM32 USB CDC boards — no install, no build step, no drivers.
-Everything runs client-side from a static page.
+Browser utilities for the Melexis.IO device and the chips it talks to — no install, no build
+step, no drivers. Everything runs client-side from a static page.
 
 **Live: https://icis4.github.io/ag1**
 
@@ -9,6 +9,8 @@ Everything runs client-side from a static page.
 |---|---|---|
 | SCPI Terminal | [terminal.html](terminal.html) | Web Serial |
 | DFU Updater | [dfuupdate.html](dfuupdate.html) | WebUSB |
+| Pressure | [pressure.html](pressure.html) | Web Serial → I2C/SPI |
+| Infrared | [infrared.html](infrared.html) | Web Serial → I2C |
 
 ## Requirements
 
@@ -54,8 +56,28 @@ Flashes ST DfuSe `.dfu` images over WebUSB, talking to STM DFU bootloaders direc
 targets and elements, reads DFU functional descriptors, recovers STM memory maps from USB string
 descriptors, and supports a manual memory-map override for bootloaders that expose none.
 
-On `melexis_io`, `:SYSTem:DFU 42` from the terminal reboots the board into its bootloader, where
-this tool picks it up.
+Connect tries to put the board into DFU mode by itself: the Terminal page cannot hand over its
+open port, but ports already granted to this origin are visible here, so one is opened briefly to
+send `:SYSTem:DFU 42` before the device picker appears. It is best effort — a busy port or a
+device that rejects the command just falls through to selecting the device by hand.
+
+For a board that is connected but should not be flashed, **Disconnect** releases the interface and
+leaves it in DFU mode, and **Run Application** performs the DfuSe leave sequence at the application
+base so the firmware starts.
+
+## Pressure
+
+Reads an MLX90835 over I2C or SPI through the Melexis IO board, with a live chart and CSV export.
+Its own help and licence are served from `pressure-README.md` and `pressure-LICENSE`, kept under
+those names so they do not collide with this repo's own files.
+
+## Infrared
+
+Index for the Melexis infrared sensors — MLX90632, MLX90640, MLX90641 and MLX90642 — each read
+over I2C through the Melexis IO board. The per-chip subpages are not built yet; the index lists
+them as upcoming rather than linking to pages that do not exist. The protocol contract for all
+four, and the traps in porting their calibration maths, are in
+[.claude/skills/melexis-infrared/SKILL.md](.claude/skills/melexis-infrared/SKILL.md).
 
 ## Running locally
 
@@ -83,6 +105,11 @@ terminal.html         SCPI terminal markup
 app.js                terminal logic — serial I/O, rendering, probes
 style.css             terminal and frontpage styles
 dfuupdate.html        DFU updater, self-contained
+pressure.html         MLX90835 readout, Bootstrap-based
+pressure-README.md    Pressure help text, shown in its Help modal
+pressure-LICENSE      Pressure licence, shown in its Help modal
+infrared.html         infrared sensor index
+theme.css             shared Bootstrap theme
 favicon.svg           shared icon
 manifest.webmanifest  PWA manifest
 service-worker.js     offline shell

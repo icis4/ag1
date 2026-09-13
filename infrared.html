@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Melexis IO tools — browser utilities for the Melexis.IO device and the chips it talks to.">
-  <title>Melexis IO Tools</title>
+  <meta name="description" content="Infrared sensor tools — read Melexis thermometers and thermal arrays over I2C through the Melexis IO board.">
+  <title>Infrared Sensors</title>
   <meta name="theme-color" content="#0b0e17">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="manifest" href="manifest.webmanifest">
@@ -18,6 +18,7 @@
       --clr-border:      hsl(225, 18%, 18%);
       --clr-text:        hsl(210, 20%, 88%);
       --clr-text-muted:  hsl(210, 15%, 55%);
+      --clr-text-dim:    hsl(210, 10%, 38%);
       --clr-accent:      hsl(174, 72%, 52%);
       --clr-accent-glow: hsla(174, 72%, 52%, .25);
       --ff-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -42,7 +43,7 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Ambient background, matching the terminal's treatment */
+    /* Ambient background, matching the other pages */
     .bg-grid {
       position: fixed;
       inset: 0;
@@ -75,8 +76,32 @@
       position: relative;
       z-index: 1;
       width: 100%;
-      max-width: 420px;
+      max-width: 460px;
       text-align: center;
+    }
+
+    .home-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 4px 10px 4px 6px;
+      border-radius: var(--radius-sm);
+      color: var(--clr-text-muted);
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color var(--dur-fast) var(--ease-out),
+                  background var(--dur-fast) var(--ease-out);
+    }
+
+    .home-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    .home-link:hover { color: var(--clr-text); background: var(--clr-surface); }
+
+    .home-link:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 2px;
     }
 
     .brand {
@@ -111,7 +136,6 @@
       font-size: 0.875rem;
     }
 
-    /* One tile for now; the grid takes more without further changes. */
     .tools {
       display: grid;
       gap: 12px;
@@ -178,37 +202,40 @@
       transform: translateX(3px);
     }
 
-    .install {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 20px;
-      padding: 9px 16px;
+    /* A chip whose page does not exist yet: same row, but inert and not a link,
+       so nothing here ever leads to a 404. Swap the <div> for an <a href> and
+       drop this class once the subpage lands. */
+    .tool--soon {
+      cursor: default;
+      opacity: .55;
+    }
+
+    .tool--soon:hover {
+      border-color: var(--clr-border);
+      transform: none;
+      box-shadow: none;
+    }
+
+    .tool--soon .tool__icon { color: var(--clr-text-dim); }
+
+    .tool__tag {
+      margin-left: auto;
+      padding: 3px 8px;
       border: 1px solid var(--clr-border);
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--clr-text-muted);
-      font-family: inherit;
-      font-size: 0.8125rem;
+      border-radius: 999px;
+      color: var(--clr-text-dim);
+      font-size: 0.6875rem;
       font-weight: 500;
-      cursor: pointer;
-      transition: color var(--dur-fast) var(--ease-out),
-                  border-color var(--dur-fast) var(--ease-out);
+      letter-spacing: .02em;
+      white-space: nowrap;
     }
 
-    .install svg { width: 14px; height: 14px; flex-shrink: 0; }
-
-    .install:hover:enabled {
-      color: var(--clr-accent);
-      border-color: var(--clr-accent);
+    .note {
+      margin: 28px 0 0;
+      color: var(--clr-text-dim);
+      font-size: 0.75rem;
+      line-height: 1.6;
     }
-
-    .install:focus-visible {
-      outline: 2px solid var(--clr-accent);
-      outline-offset: 2px;
-    }
-
-    .install:disabled { opacity: .5; cursor: default; }
 
     @media (prefers-reduced-motion: reduce) {
       .tool, .tool__arrow { transition: none; }
@@ -223,112 +250,83 @@
   <div class="bg-glow bg-glow--2"></div>
 
   <main>
-    <div class="brand">
-      <svg class="brand__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2v6m0 8v6M6 8h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z"/>
-        <circle cx="9" cy="13" r="1" fill="currentColor"/>
-        <circle cx="15" cy="13" r="1" fill="currentColor"/>
+    <a class="home-link" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
       </svg>
-      <h1>Melexis IO Tools</h1>
+      Home
+    </a>
+
+    <div class="brand">
+      <svg class="brand__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="6" cy="12" r="2"/>
+        <path d="M11 8a6 6 0 010 8M15 5a10 10 0 010 14M19 2a14 14 0 010 20"/>
+      </svg>
+      <h1>Infrared Sensors</h1>
     </div>
-    <p class="tagline">Browser utilities for Melexis.IO device and chips.</p>
+    <p class="tagline">Melexis thermometers and thermal arrays over I2C.</p>
 
     <div class="tools">
-      <a class="tool" href="terminal.html">
-        <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 17l6-5-6-5M12 19h8"/>
-        </svg>
-        <span>
-          <span class="tool__name">Terminal</span>
-          <span class="tool__desc">SCPI over USB CDC serial</span>
-        </span>
-        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
-
-      <a class="tool" href="dfuupdate.html">
+      <div class="tool tool--soon">
         <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2v7M9 6l3 3 3-3"/>
-          <rect x="4" y="12" width="16" height="9" rx="2"/>
-          <path d="M8 16.5h8"/>
+          <path d="M14 14.76V5a2 2 0 10-4 0v9.76a4 4 0 104 0z"/>
         </svg>
         <span>
-          <span class="tool__name">DFU Update</span>
-          <span class="tool__desc">Flash firmware over USB DFU</span>
+          <span class="tool__name">MLX90632</span>
+          <span class="tool__desc">Single-zone thermometer</span>
         </span>
-        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
+        <span class="tool__tag">Soon</span>
+      </div>
 
-      <a class="tool" href="pressure.html">
+      <div class="tool tool--soon">
         <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 17l5-6 4 3 4-6 5 5"/>
-          <path d="M3 21h18"/>
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M9 4v16M15 4v16M3 9.33h18M3 14.66h18"/>
         </svg>
         <span>
-          <span class="tool__name">Pressure</span>
-          <span class="tool__desc">MLX90835 sensor readout and charts</span>
+          <span class="tool__name">MLX90640</span>
+          <span class="tool__desc">32 × 24 thermal array, 768 pixels</span>
         </span>
-        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
+        <span class="tool__tag">Soon</span>
+      </div>
 
-      <a class="tool" href="infrared.html">
+      <div class="tool tool--soon">
         <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="6" cy="12" r="2"/>
-          <path d="M11 8a6 6 0 010 8M15 5a10 10 0 010 14M19 2a14 14 0 010 20"/>
+          <rect x="3" y="6" width="18" height="12" rx="2"/>
+          <path d="M9 6v12M15 6v12M3 12h18"/>
         </svg>
         <span>
-          <span class="tool__name">Infrared</span>
-          <span class="tool__desc">Thermometers and thermal arrays</span>
+          <span class="tool__name">MLX90641</span>
+          <span class="tool__desc">16 × 12 thermal array, 192 pixels</span>
         </span>
-        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
+        <span class="tool__tag">Soon</span>
+      </div>
+
+      <div class="tool tool--soon">
+        <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M9 4v16M15 4v16M3 9.33h18M3 14.66h18"/>
+          <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>
         </svg>
-      </a>
+        <span>
+          <span class="tool__name">MLX90642</span>
+          <span class="tool__desc">32 × 24 array, temperatures computed on-chip</span>
+        </span>
+        <span class="tool__tag">Soon</span>
+      </div>
     </div>
 
-    <button id="installButton" class="install" type="button" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
-      </svg>
-      Install locally
-    </button>
+    <p class="note">
+      Every sensor here is read over I2C through the Melexis IO board, so connect that first.
+    </p>
   </main>
 
-  <script>
-    // Chrome fires this only when the app is installable and not yet installed.
-    let deferredInstall = null;
-    const installButton = document.getElementById("installButton");
-
-    window.addEventListener("beforeinstallprompt", (event) => {
-      event.preventDefault();
-      deferredInstall = event;
-      installButton.hidden = false;
-    });
-
-    installButton.addEventListener("click", async () => {
-      if (!deferredInstall) return;
-      installButton.disabled = true;
-      deferredInstall.prompt();
-      await deferredInstall.userChoice;
-      deferredInstall = null;
-      installButton.hidden = true;
-      installButton.disabled = false;
-    });
-
-    window.addEventListener("appinstalled", () => {
-      deferredInstall = null;
-      installButton.hidden = true;
-    });
-  </script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

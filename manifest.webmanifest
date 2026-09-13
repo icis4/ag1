@@ -1,7 +1,7 @@
 {
   "name": "Melexis IO Tools",
   "short_name": "IO Tools",
-  "description": "Browser utilities for STM32 USB CDC devices: SCPI terminal and USB DFU firmware updater.",
+  "description": "Browser utilities for the Melexis.IO device and the chips it talks to: SCPI terminal, USB DFU updater, and sensor readouts.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
