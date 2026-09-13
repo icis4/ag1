@@ -10,7 +10,7 @@ step, no drivers. Everything runs client-side from a static page.
 | SCPI Terminal | [terminal.html](terminal.html) | Web Serial |
 | DFU Updater | [dfuupdate.html](dfuupdate.html) | WebUSB |
 | Pressure | [pressure.html](pressure.html) | Web Serial → I2C/SPI |
-| Infrared | [infrared.html](infrared.html) | Web Serial → I2C |
+| Infrared | [fir/infrared.html](fir/infrared.html) | Web Serial → I2C |
 
 ## Requirements
 
@@ -112,12 +112,13 @@ dfuupdate.html        DFU updater, self-contained
 pressure.html         MLX90835 readout, Bootstrap-based
 pressure-README.md    Pressure help text, shown in its Help modal
 pressure-LICENSE      Pressure licence, shown in its Help modal
-infrared.html         infrared sensor index
-mlx90632.html         MLX90632 thermometer readout
-mlx90640.html         MLX90640 thermal camera readout
-mlx90641.html         MLX90641 thermal array readout
-mlx90642.html         MLX90642 thermal array readout
 theme.css             shared Bootstrap theme
+fir/                  far infrared sensors
+  infrared.html         sensor index
+  mlx90632.html         MLX90632 thermometer readout
+  mlx90640.html         MLX90640 thermal camera readout
+  mlx90641.html         MLX90641 thermal array readout
+  mlx90642.html         MLX90642 thermal array readout
 favicon.svg           shared icon
 manifest.webmanifest  PWA manifest
 service-worker.js     offline shell

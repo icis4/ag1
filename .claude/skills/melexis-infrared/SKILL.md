@@ -5,8 +5,15 @@ description: Building the Infrared section of the suite — an index page plus o
 
 # Infrared sensor pages
 
-An `infrared.html` index plus one subpage per chip, following the pattern the suite already
-uses: a tile on the frontpage, a Home link back, the shared theme, no build step.
+Everything infrared lives under `fir/` (far infrared): an `infrared.html` index plus one
+subpage per chip, following the pattern the suite already uses — a tile on the frontpage,
+a Home link back, the shared theme, no build step.
+
+Because the pages sit one level down, shared assets are reached as `../favicon.svg`,
+`../theme.css`, `../manifest.webmanifest` and `../index.html`, and the service worker is
+registered as `../service-worker.js`. Its scope stays the site root, which is allowed
+because the script itself lives there — a worker can never claim a scope broader than its
+own directory.
 
 Every chip speaks **I2C through the Melexis IO board**, which is driven over SCPI on USB
 CDC. Read `.claude/skills/melexis-scpi/SKILL.md` first — framing, prompt parsing and the
@@ -210,8 +217,9 @@ sensor over this board: connect via Web Serial, `:I2C:INIT`, probe for the chip,
 clear "not present" state when the slave does not ACK, and keep a debug log of the SCPI
 exchange.
 
-Each new page needs: a tile in `index.html`, a Home link back, `theme.css`, an entry in the
-`SHELL` list in `service-worker.js`, and a row in the README's Layout table. The
+Each new page goes in `fir/` and needs: a link from `fir/infrared.html`, a Home link back
+to it, `../theme.css`, a `./fir/…` entry in the `SHELL` list in `service-worker.js`, and a
+row in the README's Layout table. The
 `deploy-check` agent covers exactly these.
 
 Prefer one subpage per chip over a single page with a chip selector — the chips share
