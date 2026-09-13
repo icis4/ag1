@@ -21,9 +21,9 @@ const SHELL = [
   "./fir/mlx90640.html",
   "./fir/mlx90641.html",
   "./fir/mlx90642.html",
-  "./theme.css",
-  "./style.css",
-  "./app.js",
+  "./css/theme.css",
+  "./css/style.css",
+  "./js/app.js",
   "./favicon.svg",
   "./manifest.webmanifest",
 ];

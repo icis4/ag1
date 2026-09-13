@@ -97,6 +97,9 @@ both Web Serial and WebUSB are available.
 The suite is a PWA. Chrome offers an install button on the frontpage, or use *Install page as app*
 from the browser menu.
 
+`service-worker.js` stays at the root rather than moving into `js/`: a worker can never claim
+a scope broader than its own directory, so from `js/` it could only control `/js/`.
+
 The service worker is deliberately **network-first**: a cache-first worker keeps serving stale
 pages during development, so the cache here is only an offline fallback. If that is ever reversed,
 `CACHE` in [service-worker.js](service-worker.js) has to be versioned per deploy.
@@ -106,10 +109,12 @@ pages during development, so the cache here is only an offline fallback. If that
 ```
 index.html            frontpage and install prompt
 terminal.html         SCPI terminal markup
-app.js                terminal logic — serial I/O, rendering, probes
-style.css             terminal and frontpage styles
 dfuupdate.html        DFU updater, self-contained
-theme.css             shared Bootstrap theme
+css/
+  style.css             terminal and frontpage styles
+  theme.css             shared Bootstrap theme
+js/
+  app.js                terminal logic — serial I/O, rendering, probes
 pressure/             MLX90835 pressure sensor
   index.html            readout, Bootstrap-based
   README.md             help text, shown in its Help modal
