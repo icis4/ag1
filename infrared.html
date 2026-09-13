@@ -202,34 +202,6 @@
       transform: translateX(3px);
     }
 
-    /* A chip whose page does not exist yet: same row, but inert and not a link,
-       so nothing here ever leads to a 404. Swap the <div> for an <a href> and
-       drop this class once the subpage lands. */
-    .tool--soon {
-      cursor: default;
-      opacity: .55;
-    }
-
-    .tool--soon:hover {
-      border-color: var(--clr-border);
-      transform: none;
-      box-shadow: none;
-    }
-
-    .tool--soon .tool__icon { color: var(--clr-text-dim); }
-
-    .tool__tag {
-      margin-left: auto;
-      padding: 3px 8px;
-      border: 1px solid var(--clr-border);
-      border-radius: 999px;
-      color: var(--clr-text-dim);
-      font-size: 0.6875rem;
-      font-weight: 500;
-      letter-spacing: .02em;
-      white-space: nowrap;
-    }
-
     .note {
       margin: 28px 0 0;
       color: var(--clr-text-dim);
@@ -269,7 +241,7 @@
     <p class="tagline">Melexis thermometers and thermal arrays over I2C.</p>
 
     <div class="tools">
-      <div class="tool tool--soon">
+      <a class="tool" href="mlx90632.html">
         <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 14.76V5a2 2 0 10-4 0v9.76a4 4 0 104 0z"/>
@@ -278,8 +250,10 @@
           <span class="tool__name">MLX90632</span>
           <span class="tool__desc">Single-zone thermometer</span>
         </span>
-        <span class="tool__tag">Soon</span>
-      </div>
+        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
 
       <a class="tool" href="mlx90640.html">
         <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MLX90632 infrared thermometer readout — object and ambient temperature over I2C through the Melexis IO board.">
+  <title>MLX90632</title>
+  <meta name="theme-color" content="#0b0e17">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="theme.css" rel="stylesheet">
+  <style>
+    body { min-height: 100vh; }
+    .shell { width: min(1100px, calc(100vw - 32px)); margin: 32px auto; }
+
+    .home-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-bottom: 6px; padding: 4px 10px 4px 6px;
+      border-radius: var(--mx-radius); color: var(--mx-text-muted);
+      font-size: .75rem; font-weight: 500; text-decoration: none;
+      transition: color 140ms ease, background 140ms ease;
+    }
+    .home-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .home-link:hover { color: var(--mx-text); background: var(--mx-surface); }
+    .home-link:focus-visible { outline: 2px solid var(--mx-accent); outline-offset: 2px; }
+
+    .top-toolbar {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+    }
+    .top-toolbar h1 { margin: 0; font-size: clamp(1.6rem, 2.6vw, 2.2rem); }
+    .toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .card { border: 1px solid var(--clr-border); border-radius: var(--radius-lg); background: var(--clr-surface); }
+    .card h2 { margin: 0 0 14px; color: var(--clr-text-muted); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+
+    /* Hero reading: the object temperature is the headline, ambient supports it. */
+    .hero { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+    .hero__value {
+      font-family: var(--ff-mono); font-size: clamp(2.6rem, 7vw, 4rem);
+      font-weight: 600; line-height: 1; letter-spacing: -.02em;
+      color: var(--series-object);
+    }
+
+    /* Until a reading arrives the placeholder should read as absent, not as a
+       value rendered in the series colour. */
+    .hero__value.is-empty, .hero__side-value.is-empty { color: var(--clr-text-dim, hsl(210, 10%, 38%)); }
+    .hero__unit { font-size: 1.4rem; color: var(--clr-text-muted); font-weight: 400; }
+    .hero__side { margin-left: auto; text-align: right; }
+    .hero__side-label { display: block; color: var(--clr-text-muted); font-size: .625rem; text-transform: uppercase; letter-spacing: .08em; }
+    .hero__side-value { display: block; margin-top: 2px; font-family: var(--ff-mono); font-size: 1.4rem; font-weight: 600; color: var(--series-ambient); }
+
+    .chart-wrap { position: relative; width: 100%; aspect-ratio: 5 / 2; margin-top: 18px; }
+    #trend { width: 100%; height: 100%; display: block; }
+
+    .chart-empty {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: var(--clr-text-dim, hsl(210, 10%, 38%)); font-size: .8125rem; text-align: center; padding: 16px;
+    }
+
+    /* Legend: identity is never colour alone, so each key is labelled. */
+    .legend { display: flex; gap: 18px; margin-top: 10px; font-size: .75rem; color: var(--clr-text-muted); }
+    .legend__key { display: inline-flex; align-items: center; gap: 7px; }
+    .legend__swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+    .tooltip {
+      position: absolute; pointer-events: none; opacity: 0;
+      padding: 7px 10px; border: 1px solid var(--clr-border);
+      border-radius: var(--radius-sm); background: hsl(225, 30%, 8%);
+      font-family: var(--ff-mono); font-size: .6875rem; line-height: 1.5;
+      white-space: nowrap; transition: opacity 90ms ease; z-index: 3;
+    }
+    .tooltip b { font-weight: 600; }
+
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .8125rem; }
+    .kv dt { color: var(--clr-text-muted); font-weight: 400; }
+    .kv dd { margin: 0; font-family: var(--ff-mono); text-align: right; }
+
+    #log {
+      height: 170px; padding: 12px;
+      border: 1px solid var(--clr-border-subtle); border-radius: var(--radius-md);
+      background: hsl(225, 30%, 4%); font-family: var(--ff-mono); font-size: .6875rem;
+      line-height: 1.6; white-space: pre-wrap; overflow: auto;
+      scrollbar-width: thin; scrollbar-color: var(--clr-border) transparent;
+    }
+
+    .note { margin: 18px 0 0; color: var(--clr-text-muted); font-size: .75rem; line-height: 1.6; }
+
+    table.readings { width: 100%; font-family: var(--ff-mono); font-size: .6875rem; }
+    table.readings th { color: var(--clr-text-muted); font-weight: 500; text-align: right; padding: 2px 8px; }
+    table.readings td { text-align: right; padding: 2px 8px; }
+    table.readings th:first-child, table.readings td:first-child { text-align: left; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <a class="home-link" href="infrared.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Infrared
+    </a>
+
+    <div class="top-toolbar">
+      <div>
+        <h1 class="fw-bold">MLX90632</h1>
+        <div class="text-secondary" style="font-size:.8125rem">Single-zone infrared thermometer</div>
+      </div>
+      <div class="toolbar-actions">
+        <button id="btnConnect" class="btn btn-sm btn-primary">Connect</button>
+        <button id="btnStream" class="btn btn-sm btn-outline-secondary" disabled>Start</button>
+        <button id="btnDisconnect" class="btn btn-sm btn-outline-secondary" disabled>Disconnect</button>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-8">
+        <div class="card">
+          <div class="card-body">
+            <h2>Object temperature</h2>
+            <div class="hero">
+              <span id="heroValue" class="hero__value is-empty">—</span>
+              <span class="hero__side">
+                <span class="hero__side-label">Ambient</span>
+                <span id="heroAmbient" class="hero__side-value is-empty">—</span>
+              </span>
+            </div>
+
+            <div class="chart-wrap">
+              <canvas id="trend"></canvas>
+              <div id="chartEmpty" class="chart-empty">Connect the Melexis IO board with an MLX90632 on I2C.</div>
+              <div id="tooltip" class="tooltip"></div>
+            </div>
+            <div class="legend">
+              <span class="legend__key"><span class="legend__swatch" style="background:var(--series-object)"></span>Object</span>
+              <span class="legend__key"><span class="legend__swatch" style="background:var(--series-ambient)"></span>Ambient</span>
+              <span class="legend__key ms-auto"><span id="chartSpan">—</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="card mb-3">
+          <div class="card-body">
+            <h2>Device</h2>
+            <dl class="kv">
+              <dt>Status</dt><dd><span id="badgeConn" class="badge text-bg-secondary">Disconnected</span></dd>
+              <dt>EEPROM</dt><dd id="infoVersion">—</dd>
+              <dt>Refresh rate</dt><dd id="infoRate">—</dd>
+              <dt>Measurement</dt><dd id="infoMeas">—</dd>
+              <dt>Sample</dt><dd id="infoSample">—</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h2>Measurement</h2>
+            <label class="form-label" for="emissivity" style="font-size:.75rem">Emissivity</label>
+            <input id="emissivity" class="form-control form-control-sm" type="number" value="1.00" min="0.1" max="1" step="0.01">
+            <div class="form-text" style="font-size:.6875rem">
+              Applied in the browser, so it takes effect on the next reading. The library defaults to
+              1.0; most non-metallic surfaces sit near 0.95.
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <h2>Latest readings</h2>
+            <table class="readings">
+              <thead><tr><th>Time</th><th>Object</th><th>Ambient</th></tr></thead>
+              <tbody id="readingsBody"><tr><td colspan="3" class="text-secondary">No samples yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h2>SCPI log</h2>
+            <pre id="log"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      Unlike the array sensors, this part reports a single zone, so the reading is a number over
+      time rather than an image. Calibration constants are read from EEPROM once per session and the
+      object temperature is solved iteratively in the browser, ported from the Melexis MLX90632
+      driver library (Apache-2.0). Medical measurement type only; the extended range mode uses a
+      different EEPROM block and raw-read path.
+    </p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+  <script>
+  (() => {
+    "use strict";
+
+    /* ------------------------------------------------------------------
+     * Maths ported from the Melexis MLX90632 driver library (src/mlx90632.c),
+     * Apache-2.0: https://github.com/melexis/mlx90632-library
+     * The register access mirrors mlx90632-example/Src/main.c, which is the
+     * reference port of the mlx90632_depends.h layer.
+     * ------------------------------------------------------------------ */
+
+    const SLAVE = 0x3A;
+
+    /* Addresses index 16-bit REGISTERS here, one per address — a 32-bit
+     * constant occupies two consecutive addresses. (The array sensors are byte
+     * addressed instead; do not carry that assumption over.) */
+    const ADDR = {
+      eeVersion: 0x240b,
+      P_R: 0x240c, P_G: 0x240e, P_T: 0x2410, P_O: 0x2412,
+      Ea: 0x2424, Eb: 0x2426, Fa: 0x2428, Fb: 0x242a, Ga: 0x242c,
+      Gb: 0x242e, Ka: 0x242f,
+      Ha: 0x2481, Hb: 0x2482,
+      eeCtrl: 0x24d4,
+      status: 0x3fff,
+      ram: 0x4000,
+    };
+
+    const STAT_DATA_RDY = 0x0001;
+    const STAT_CYCLE_POS = 0x007C;    // GENMASK(6,2)
+    const DSPv5 = 0x05;
+    const REF_3 = 12.0, REF_12 = 12.0;
+    const POW10 = 1e10;
+    const HISTORY = 240;
+
+    const RAM_1 = n => ADDR.ram + 3 * n;
+    const RAM_2 = n => ADDR.ram + 3 * n + 1;
+    const RAM_3 = n => ADDR.ram + 3 * n + 2;
+
+    const s16 = v => (v > 32767 ? v - 65536 : v);
+    const s32 = v => (v >= 0x80000000 ? v - 0x100000000 : v);
+
+    function preprocessAmbient(ambientNew, ambientOld, Gb) {
+      const kGb = Gb / 1024.0;
+      const VR_Ta = ambientOld + kGb * (ambientNew / REF_3);
+      return ((ambientNew / REF_3) / VR_Ta) * 524288.0;
+    }
+
+    function preprocessObject(objectNew, objectOld, ambientNew, ambientOld, Ka) {
+      const kKa = Ka / 1024.0;
+      const VR_IR = ambientOld + kKa * (ambientNew / REF_3);
+      // Integer division: both raws are int16_t in the C, so the mean truncates
+      // before it is ever used as a double.
+      return (((Math.trunc((objectNew + objectOld) / 2)) / REF_12) / VR_IR) * 524288.0;
+    }
+
+    function calcTempAmbient(ambientNew, ambientOld, P_T, P_R, P_G, P_O, Gb) {
+      const AMB = preprocessAmbient(ambientNew, ambientOld, Gb);
+      const Asub = P_T / 17592186044416.0;
+      const Bsub = AMB - (P_R / 256.0);
+      const Ablock = Asub * (Bsub * Bsub);
+      const Bblock = (Bsub / P_G) * 1048576.0;
+      const Cblock = P_O / 256.0;
+      return Bblock + Ablock + Cblock;
+    }
+
+    function objectIteration(prevObjectTemp, object, TAdut, Ga, Fa, Fb, Ha, Hb, emissivity) {
+      const HaCustomer = Ha / 16384.0;
+      const HbCustomer = Hb / 1024.0;
+      const calcedGa = (Ga * (prevObjectTemp - 25)) / 68719476736.0;
+      const KsTAtmp = Fb * (TAdut - 25);
+      const calcedGb = KsTAtmp / 68719476736.0;
+      const AlphaCorr = ((Fa * POW10) * HaCustomer * (1 + calcedGa + calcedGb)) / 70368744177664.0;
+      const calcedFa = object / (emissivity * (AlphaCorr / POW10));
+      // Three sequential multiplies, as the C does. Math.pow(x, 4) rounds
+      // differently and drifts from the reference by ~1e-5 °C; it is also slower.
+      const TAdutK = TAdut + 273.15;
+      const TAdut4 = TAdutK * TAdutK * TAdutK * TAdutK;
+      const firstSqrt = Math.sqrt(calcedFa + TAdut4);
+      return Math.sqrt(firstSqrt) - 273.15 - HbCustomer;
+    }
+
+    /* Five fixed iterations, exactly as the library does: the solution converges
+     * quickly and a loop-until-stable would diverge from the reference. */
+    function calcTempObject(objectRaw, ambientRaw, Ea, Eb, Ga, Fa, Fb, Ha, Hb, emissivity) {
+      /* The C signature takes int32_t for both, while the preprocess functions
+       * return doubles — so the call site truncates, and that truncation is part
+       * of the algorithm rather than an accident of the prototype. */
+      const object = Math.trunc(objectRaw);
+      const ambient = Math.trunc(ambientRaw);
+
+      const kEa = Ea / 65536.0;
+      const kEb = Eb / 256.0;
+      const TAdut = (ambient - kEb) / kEa + 25;
+      let temp = 25.0;
+      for (let i = 0; i < 5; i++) {
+        temp = objectIteration(temp, object, TAdut, Ga, Fa, Fb, Ha, Hb, emissivity);
+      }
+      return temp;
+    }
+
+    /* ---------------- page ---------------- */
+
+    const els = id => document.getElementById(id);
+    const ui = {
+      btnConnect: els("btnConnect"), btnStream: els("btnStream"), btnDisconnect: els("btnDisconnect"),
+      badgeConn: els("badgeConn"), log: els("log"),
+      heroValue: els("heroValue"), heroAmbient: els("heroAmbient"),
+      canvas: els("trend"), chartEmpty: els("chartEmpty"), tooltip: els("tooltip"),
+      chartSpan: els("chartSpan"), readingsBody: els("readingsBody"),
+      infoVersion: els("infoVersion"), infoRate: els("infoRate"),
+      infoMeas: els("infoMeas"), infoSample: els("infoSample"),
+      emissivity: els("emissivity"),
+    };
+
+    const state = {
+      port: null, writer: null, reader: null, readLoop: null,
+      rxBuffer: "", waiters: [],
+      streaming: false, cal: null,
+      samples: [],          // { t, object, ambient }
+      hoverIndex: -1,
+      lastSampleAt: 0,
+    };
+
+    function log(message) {
+      ui.log.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+      ui.log.scrollTop = ui.log.scrollHeight;
+    }
+
+    // ---- serial ----
+    function notifyWaiters() {
+      const pending = state.waiters;
+      state.waiters = [];
+      for (const resolve of pending) resolve();
+    }
+
+    function waitForData(timeoutMs) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        state.waiters.push(finish);
+        setTimeout(finish, timeoutMs);
+      });
+    }
+
+    function startReadLoop() {
+      const decoder = new TextDecoder();
+      state.readLoop = (async () => {
+        while (state.port && state.port.readable && state.reader) {
+          try {
+            const { value, done } = await state.reader.read();
+            if (done) break;
+            if (value) { state.rxBuffer += decoder.decode(value, { stream: true }); notifyWaiters(); }
+          } catch { break; }
+        }
+        notifyWaiters();
+      })();
+    }
+
+    const PROMPT_RE = /(?:^|\r?\n)\((\w+)\)>\s*$/;
+
+    async function scpi(command, timeoutMs = 3000) {
+      if (!state.writer) throw new Error("Not connected.");
+      state.rxBuffer = "";
+      await state.writer.write(new TextEncoder().encode(command + "\n"));   // LF only
+
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const match = state.rxBuffer.match(PROMPT_RE);
+        if (match) {
+          const payload = state.rxBuffer.slice(0, match.index);
+          if (match[1] !== "OK") throw new Error(`${command.split(" ")[0]} → (${match[1]})`);
+          return payload.trim();
+        }
+        await waitForData(15);
+      }
+      throw new Error(`Timed out waiting for a reply to ${command.split(" ")[0]}`);
+    }
+
+    const hex = n => "0x" + n.toString(16).toUpperCase();
+
+    async function readRegs(address, count) {
+      const payload = await scpi(`:I2C:MemReaD ${hex(SLAVE)},${hex(address)},2,${count * 2}`);
+      const bytes = payload.split(",");
+      if (bytes.length < count * 2) {
+        throw new Error(`Short read at ${hex(address)}: ${bytes.length} of ${count * 2} bytes`);
+      }
+      const out = new Uint16Array(count);
+      for (let i = 0; i < count; i++) {
+        out[i] = (parseInt(bytes[i * 2], 16) << 8) | parseInt(bytes[i * 2 + 1], 16);
+      }
+      return out;
+    }
+
+    const readReg = async a => (await readRegs(a, 1))[0];
+
+    /* The two registers of a 32-bit constant are stored with the words
+     * SWAPPED: the first holds the low half. Reading it as a plain big-endian
+     * 32-bit value yields a plausible but wrong constant, and the temperature
+     * then comes out quietly off rather than obviously broken. */
+    async function readReg32(address) {
+      const w = await readRegs(address, 2);
+      return s32(((w[1] << 16) >>> 0) + w[0]);
+    }
+
+    async function writeReg(address, value) {
+      await scpi(`:I2C:MemWRite ${hex(SLAVE)},${hex(address)},2,${hex((value >> 8) & 0xFF)},${hex(value & 0xFF)}`);
+    }
+
+    const RATE_HZ = ["0.5 Hz", "1 Hz", "2 Hz", "4 Hz", "8 Hz", "16 Hz", "32 Hz", "64 Hz"];
+
+    async function initSensor() {
+      const version = await readReg(ADDR.eeVersion);
+      if ((version & 0x00FF) !== DSPv5) {
+        throw new Error(`Unexpected EEPROM version ${hex(version)}; expected DSPv5.`);
+      }
+      ui.infoVersion.textContent = `DSPv5 (${hex(version)})`;
+      if ((version & 0x7F00) === 0x0500) {
+        log("This part reports extended-range support; this page uses medical mode only.");
+      }
+
+      // Clear NEW_DATA for a clean start, as mlx90632_init does.
+      const status = await readReg(ADDR.status);
+      await writeReg(ADDR.status, status & ~STAT_DATA_RDY);
+
+      const ctrl = await readReg(ADDR.eeCtrl);
+      const rate = (ctrl & 0x0700) >> 8;
+      ui.infoRate.textContent = RATE_HZ[rate] ?? `code ${rate}`;
+      ui.infoMeas.textContent = "Medical";
+
+      const cal = {
+        P_R: await readReg32(ADDR.P_R), P_G: await readReg32(ADDR.P_G),
+        P_T: await readReg32(ADDR.P_T), P_O: await readReg32(ADDR.P_O),
+        Ea: await readReg32(ADDR.Ea), Eb: await readReg32(ADDR.Eb),
+        Fa: await readReg32(ADDR.Fa), Fb: await readReg32(ADDR.Fb),
+        Ga: await readReg32(ADDR.Ga),
+        Gb: s16(await readReg(ADDR.Gb)), Ka: s16(await readReg(ADDR.Ka)),
+        Ha: s16(await readReg(ADDR.Ha)), Hb: s16(await readReg(ADDR.Hb)),
+      };
+      return cal;
+    }
+
+    async function readSample() {
+      // Trigger: clear the data-ready bit, then let the board wait for it to
+      // come back rather than polling over the serial link.
+      const before = await readReg(ADDR.status);
+      await writeReg(ADDR.status, before & ~STAT_DATA_RDY);
+
+      await scpi(`:I2C:WaitMask ${hex(SLAVE)},${hex(ADDR.status)},${hex(STAT_DATA_RDY)},2500,2000`, 4000);
+
+      const status = await readReg(ADDR.status);
+      const cyclePosition = (status & STAT_CYCLE_POS) >> 2;
+      let channel, channelOld;
+      if (cyclePosition === 1) { channel = 1; channelOld = 2; }
+      else if (cyclePosition === 2) { channel = 2; channelOld = 1; }
+      else throw new Error(`Unexpected measurement cycle position ${cyclePosition}`);
+
+      const ambientNew = s16(await readReg(RAM_3(1)));
+      const ambientOld = s16(await readReg(RAM_3(2)));
+
+      // Each object reading is the mean of two RAM cells, as the library does.
+      const newHi = s16(await readReg(RAM_2(channel)));
+      const newLo = s16(await readReg(RAM_1(channel)));
+      const objectNew = Math.trunc((newHi + newLo) / 2);
+
+      const oldHi = s16(await readReg(RAM_2(channelOld)));
+      const oldLo = s16(await readReg(RAM_1(channelOld)));
+      const objectOld = Math.trunc((oldHi + oldLo) / 2);
+
+      const c = state.cal;
+      const emissivity = Math.min(1, Math.max(0.1, Number(ui.emissivity.value) || 1));
+      const ambient = calcTempAmbient(ambientNew, ambientOld, c.P_T, c.P_R, c.P_G, c.P_O, c.Gb);
+      const preAmbient = preprocessAmbient(ambientNew, ambientOld, c.Gb);
+      const preObject = preprocessObject(objectNew, objectOld, ambientNew, ambientOld, c.Ka);
+      const object = calcTempObject(preObject, preAmbient, c.Ea, c.Eb, c.Ga, c.Fa, c.Fb, c.Ha, c.Hb, emissivity);
+
+      return { object, ambient };
+    }
+
+    // ---- chart ----
+    // Two series only, so hues are assigned in fixed order and never cycled.
+    // Both steps are validated against this surface for the dark-mode lightness
+    // band, chroma, CVD separation and contrast.
+    const SERIES = { object: "#1cab9d", ambient: "#c98208" };
+    document.documentElement.style.setProperty("--series-object", SERIES.object);
+    document.documentElement.style.setProperty("--series-ambient", SERIES.ambient);
+
+    const ctx = ui.canvas.getContext("2d");
+    const PAD = { top: 12, right: 52, bottom: 22, left: 44 };
+    let plot = null;   // geometry of the last draw, for hit testing
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = ui.canvas.getBoundingClientRect();
+      if (rect.width === 0) return false;
+      ui.canvas.width = Math.round(rect.width * dpr);
+      ui.canvas.height = Math.round(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return true;
+    }
+
+    function drawChart() {
+      if (!resizeCanvas()) return;
+      const rect = ui.canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const data = state.samples;
+      if (data.length < 2) { plot = null; return; }
+
+      let lo = Infinity, hi = -Infinity;
+      for (const s of data) {
+        lo = Math.min(lo, s.object, s.ambient);
+        hi = Math.max(hi, s.object, s.ambient);
+      }
+      const pad = Math.max(0.5, (hi - lo) * 0.12);
+      lo -= pad; hi += pad;
+
+      const x = i => PAD.left + (i / (data.length - 1)) * (W - PAD.left - PAD.right);
+      const y = v => PAD.top + (1 - (v - lo) / (hi - lo)) * (H - PAD.top - PAD.bottom);
+      plot = { x, y, W, H, lo, hi };
+
+      // Recessive grid and axis labels; the data should carry the contrast.
+      const styles = getComputedStyle(document.documentElement);
+      const gridColor = styles.getPropertyValue("--clr-border-subtle").trim() || "#222";
+      const inkMuted = styles.getPropertyValue("--clr-text-muted").trim() || "#888";
+
+      ctx.font = "10px 'JetBrains Mono', monospace";
+      ctx.strokeStyle = gridColor;
+      ctx.fillStyle = inkMuted;
+      ctx.lineWidth = 1;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let g = 0; g <= 4; g++) {
+        const v = lo + (hi - lo) * (g / 4);
+        const gy = Math.round(y(v)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(PAD.left, gy); ctx.lineTo(W - PAD.right, gy); ctx.stroke();
+        ctx.fillText(v.toFixed(1), PAD.left - 8, gy);
+      }
+
+      const line = (key, colour) => {
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        data.forEach((s, i) => (i === 0 ? ctx.moveTo(x(i), y(s[key])) : ctx.lineTo(x(i), y(s[key]))));
+        ctx.stroke();
+
+        // Direct label at the line end, so identity never rests on colour alone.
+        const last = data[data.length - 1];
+        ctx.fillStyle = colour;
+        ctx.textAlign = "left";
+        ctx.fillText(last[key].toFixed(1), W - PAD.right + 7, y(last[key]));
+      };
+      line("ambient", SERIES.ambient);
+      line("object", SERIES.object);
+
+      if (state.hoverIndex >= 0 && state.hoverIndex < data.length) {
+        const hx = x(state.hoverIndex);
+        ctx.strokeStyle = inkMuted;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(hx, PAD.top); ctx.lineTo(hx, H - PAD.bottom); ctx.stroke();
+        ctx.setLineDash([]);
+        for (const [key, colour] of [["object", SERIES.object], ["ambient", SERIES.ambient]]) {
+          ctx.fillStyle = colour;
+          ctx.beginPath(); ctx.arc(hx, y(data[state.hoverIndex][key]), 4, 0, Math.PI * 2); ctx.fill();
+          // A surface ring keeps the marker readable where the lines overlap.
+          ctx.strokeStyle = styles.getPropertyValue("--clr-surface").trim() || "#111";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+    }
+
+    function showTooltip(event) {
+      const data = state.samples;
+      if (!plot || data.length < 2) return;
+      const rect = ui.canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const span = plot.W - PAD.left - PAD.right;
+      const i = Math.max(0, Math.min(data.length - 1,
+        Math.round(((px - PAD.left) / span) * (data.length - 1))));
+      state.hoverIndex = i;
+      drawChart();
+
+      const s = data[i];
+      ui.tooltip.innerHTML =
+        `${new Date(s.t).toLocaleTimeString()}<br>` +
+        `<b style="color:${SERIES.object}">${s.object.toFixed(2)} °C</b> object<br>` +
+        `<b style="color:${SERIES.ambient}">${s.ambient.toFixed(2)} °C</b> ambient`;
+      ui.tooltip.style.opacity = "1";
+      const tw = ui.tooltip.offsetWidth;
+      ui.tooltip.style.left = `${Math.min(plot.W - tw - 4, Math.max(4, plot.x(i) + 12))}px`;
+      ui.tooltip.style.top = `${Math.max(4, plot.y(s.object) - 46)}px`;
+    }
+
+    function hideTooltip() {
+      state.hoverIndex = -1;
+      ui.tooltip.style.opacity = "0";
+      drawChart();
+    }
+
+    function renderReadings() {
+      const rows = state.samples.slice(-6).reverse();
+      if (!rows.length) {
+        ui.readingsBody.innerHTML = '<tr><td colspan="3" class="text-secondary">No samples yet.</td></tr>';
+        return;
+      }
+      ui.readingsBody.innerHTML = rows.map(s =>
+        `<tr><td>${new Date(s.t).toLocaleTimeString()}</td><td>${s.object.toFixed(2)}</td><td>${s.ambient.toFixed(2)}</td></tr>`
+      ).join("");
+    }
+
+    function addSample(object, ambient) {
+      state.samples.push({ t: Date.now(), object, ambient });
+      if (state.samples.length > HISTORY) state.samples.shift();
+
+      ui.heroValue.classList.remove("is-empty");
+      ui.heroAmbient.classList.remove("is-empty");
+      ui.heroValue.innerHTML = `${object.toFixed(2)}<span class="hero__unit"> °C</span>`;
+      ui.heroAmbient.textContent = `${ambient.toFixed(2)} °C`;
+      ui.chartEmpty.hidden = state.samples.length >= 2;
+
+      const now = performance.now();
+      if (state.lastSampleAt) ui.infoSample.textContent = `${Math.round(now - state.lastSampleAt)} ms`;
+      state.lastSampleAt = now;
+
+      const first = state.samples[0].t, last = state.samples[state.samples.length - 1].t;
+      ui.chartSpan.textContent = `${state.samples.length} samples · ${Math.round((last - first) / 1000)} s`;
+
+      drawChart();
+      renderReadings();
+    }
+
+    async function streamLoop() {
+      while (state.streaming) {
+        try {
+          const { object, ambient } = await readSample();
+          addSample(object, ambient);
+        } catch (error) {
+          if (!state.streaming) break;
+          log(`Reading failed: ${error.message}`);
+          stopStreaming();
+          break;
+        }
+      }
+    }
+
+    function startStreaming() {
+      state.streaming = true;
+      state.lastSampleAt = 0;
+      ui.btnStream.textContent = "Stop";
+      log("Reading continuously.");
+      streamLoop();
+    }
+
+    function stopStreaming() {
+      state.streaming = false;
+      ui.btnStream.textContent = "Start";
+      ui.infoSample.textContent = "—";
+    }
+
+    function setConnected(connected) {
+      ui.badgeConn.className = connected ? "badge text-bg-success" : "badge text-bg-secondary";
+      ui.badgeConn.textContent = connected ? "Connected" : "Disconnected";
+      ui.btnConnect.disabled = connected;
+      ui.btnStream.disabled = !connected;
+      ui.btnDisconnect.disabled = !connected;
+      if (!connected) {
+        ui.heroValue.classList.add("is-empty");
+        ui.heroValue.textContent = "—";
+        ui.heroAmbient.classList.add("is-empty");
+        ui.heroAmbient.textContent = "—";
+        ui.chartEmpty.hidden = false;
+        ui.chartEmpty.textContent = "Connect the Melexis IO board with an MLX90632 on I2C.";
+      }
+    }
+
+    async function connect() {
+      if (!("serial" in navigator)) {
+        log("Web Serial is unavailable. Use Chrome, Edge or Opera over https:// or http://localhost.");
+        return;
+      }
+
+      try {
+        state.port = await navigator.serial.requestPort();
+        await state.port.open({ baudRate: 115200 });
+        state.writer = state.port.writable.getWriter();
+        state.reader = state.port.readable.getReader();
+        startReadLoop();
+        setConnected(true);
+        log("Serial port open.");
+
+        await scpi(":I2C:INIT");
+        await scpi(":I2C:FREQuency 400k");
+        log("I2C ready at 400 kHz.");
+
+        state.cal = await initSensor();
+        log(`Calibration read; sensor ready at ${hex(SLAVE)}.`);
+      } catch (error) {
+        if (error && error.name === "NotFoundError") {
+          log("Port selection cancelled.");
+        } else {
+          log(`Connect failed: ${error.message}`);
+          ui.chartEmpty.textContent = "No MLX90632 answered on I2C. Check wiring and the slave address.";
+        }
+        await disconnect();
+      }
+    }
+
+    async function disconnect() {
+      stopStreaming();
+      state.cal = null;
+
+      // The read loop owns the lock and releases it; cancel only wakes the
+      // pending read, so wait for the loop before closing the port.
+      if (state.reader) { try { await state.reader.cancel(); } catch { /* gone */ } }
+      if (state.readLoop) { try { await state.readLoop; } catch { /* reported */ } state.readLoop = null; }
+      if (state.reader) { try { state.reader.releaseLock(); } catch { /* released */ } state.reader = null; }
+      if (state.writer) { try { state.writer.releaseLock(); } catch { /* released */ } state.writer = null; }
+      if (state.port) { try { await state.port.close(); } catch { /* closed */ } state.port = null; }
+
+      state.rxBuffer = "";
+      setConnected(false);
+    }
+
+    ui.btnConnect.addEventListener("click", connect);
+    ui.btnDisconnect.addEventListener("click", async () => { await disconnect(); log("Disconnected."); });
+    ui.btnStream.addEventListener("click", () => { state.streaming ? stopStreaming() : startStreaming(); });
+
+    ui.canvas.addEventListener("pointermove", showTooltip);
+    ui.canvas.addEventListener("pointerleave", hideTooltip);
+    window.addEventListener("resize", drawChart);
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js").catch(() => { /* optional */ });
+      });
+    }
+
+    setConnected(false);
+    drawChart();
+    log("Ready. Connect the Melexis IO board, then press Start.");
+  })();
+  </script>
+</body>
+</html>
