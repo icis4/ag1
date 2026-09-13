@@ -32,6 +32,11 @@ Under `~/projects/infrared/`, all Apache-2.0:
 | frame read | a few registers | 834 w @ `0x0400` | 6 × 32 w @ `0x0400` | 768 w @ `0x342C` |
 | page shape | readout + chart | false-colour image | false-colour image | false-colour image |
 
+Melexis application notes for these chips are distilled under `references/`:
+`mlx90632-application-notes.md` (measurement modes, refresh rate) and
+`ir-design-application-notes.md` (the shared thermal/mechanical note, plus which notes exist
+per chip — the 90640 and 90642 have none).
+
 `mlx90632-example` is a reference STM32 port of the 90632 library (Nucleo-F070RB /
 F4Discovery, CubeMX). Its `Src/main.c` is the most useful file in the whole set: it
 implements the `mlx90632_depends.h` layer and calls the library in the correct order. Read
@@ -120,6 +125,12 @@ translation unit for that reason. Start with medical; add extended only when ask
 
 `MLX90632_MEAS_MAX_TIME` is 2000 ms at the slowest refresh rate, so a page must not treat a
 slow reply as a dead device.
+
+For anything beyond the default continuous-medical loop — picking a measurement mode,
+burst/sleeping-step timing, polling `new_data` vs `device_busy`, or changing the refresh rate
+in EEPROM — read `references/mlx90632-application-notes.md`. It distils the two Melexis
+application notes (measurement modes, changing the refresh rate) and maps their `RAM_n`
+naming onto the library's macros.
 
 ## MLX90640 — 32×24 array
 
