@@ -5,8 +5,8 @@ description: Building the Infrared section of the suite — an index page plus o
 
 # Infrared sensor pages
 
-Everything infrared lives under `fir/` (far infrared): an `infrared.html` index plus one
-subpage per chip, following the pattern the suite already uses — a tile on the frontpage,
+Everything infrared lives under `fir/` (far infrared): `fir/index.html` serves the section
+at `/fir/`, plus one subpage per chip, following the pattern the suite already uses — a tile on the frontpage,
 a Home link back, the shared theme, no build step.
 
 Because the pages sit one level down, shared assets are reached as `../favicon.svg`,
@@ -217,8 +217,8 @@ sensor over this board: connect via Web Serial, `:I2C:INIT`, probe for the chip,
 clear "not present" state when the slave does not ACK, and keep a debug log of the SCPI
 exchange.
 
-Each new page goes in `fir/` and needs: a link from `fir/infrared.html`, a Home link back
-to it, `../theme.css`, a `./fir/…` entry in the `SHELL` list in `service-worker.js`, and a
+Each new page goes in `fir/` and needs: a link from `fir/index.html`, a Home link back to
+`./`, `../theme.css`, a `./fir/…` entry in the `SHELL` list in `service-worker.js`, and a
 row in the README's Layout table. The
 `deploy-check` agent covers exactly these.
 

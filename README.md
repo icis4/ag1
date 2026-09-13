@@ -10,7 +10,7 @@ step, no drivers. Everything runs client-side from a static page.
 | SCPI Terminal | [terminal.html](terminal.html) | Web Serial |
 | DFU Updater | [dfuupdate.html](dfuupdate.html) | WebUSB |
 | Pressure | [pressure.html](pressure.html) | Web Serial → I2C/SPI |
-| Infrared | [fir/infrared.html](fir/infrared.html) | Web Serial → I2C |
+| Infrared | [fir/](fir/) | Web Serial → I2C |
 
 ## Requirements
 
@@ -114,7 +114,7 @@ pressure-README.md    Pressure help text, shown in its Help modal
 pressure-LICENSE      Pressure licence, shown in its Help modal
 theme.css             shared Bootstrap theme
 fir/                  far infrared sensors
-  infrared.html         sensor index
+  index.html            sensor index
   mlx90632.html         MLX90632 thermometer readout
   mlx90640.html         MLX90640 thermal camera readout
   mlx90641.html         MLX90641 thermal array readout
