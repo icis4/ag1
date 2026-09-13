@@ -126,6 +126,14 @@ Do not restate command sets here — they change there. melexis_io has `doc/SCPI
 per-module files; evb and mip have no equivalent index, so read the pattern tables directly
 (`Application/**/commands_*.c`, the `.pattern` fields). The tables always win over the docs.
 
+## Bus-level failures
+
+When an exchange is intermittent, hangs, or comes back NACKed, the bus itself is a
+suspect before the framing is. `references/robust-i2c.md` distils the Melexis note on
+robust I2C for this board: why lowering `:I2C:FREQuency` is a diagnostic step, why a page
+reload can leave a slave mid-transaction, and why `:I2C:INIT` cannot free a stuck SDA line
+(the firmware has no nine-clock recovery).
+
 ## Gotchas when changing terminal code
 
 - Probe responses bypass `displayData`, but their bytes still count toward the RX stat.

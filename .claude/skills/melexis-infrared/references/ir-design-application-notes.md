@@ -12,12 +12,13 @@ Taken from `https://www.melexis.com/sitemap.xml`, which lists every document pag
 |---|---|
 | MLX90632 | measurement modes; changing the refresh rate — see `mlx90632-application-notes.md` |
 | MLX90640 | **none** |
-| MLX90641 | start-up behaviour (`/en/documents/documentation/application-notes/application-note-mlx90641-start-up-behaviour`) |
+| MLX90641 | start-up behaviour — see `mlx90641-start-up.md` |
 | MLX90642 | **none** — only datasheet, EVB90642 user manual and EVB software |
 
 Chip-agnostic notes that apply to all four: *Thermal/Mechanical design recommendations - IR
-products* (summarised below), *Solder techniques for IR sensor products*, and
-*Recommendations for a robust I2C communication*.
+products* (summarised below) and *Recommendations for a robust I2C communication* (distilled
+in the sibling skill, `.claude/skills/melexis-scpi/references/robust-i2c.md`). A third,
+*Solder techniques for IR sensor products*, is assembly guidance and out of scope here.
 
 For the arrays, the substantive protocol documentation is the datasheet plus the driver PDF
 that ships in each library repo (`~/projects/infrared/mlx9064x-library/MLX9064x driver.pdf`),
@@ -49,15 +50,10 @@ Practical consequence for a page: when readings look wrong, the cause is usually
 environment or a partially filled spot, not the maths. Worth saying so in the UI rather than
 letting a user chase a calibration bug that is not there.
 
-## Not yet retrieved
+## Deliberately not tracked
 
-`www.melexis.com` serves its document pages behind a Cloudflare challenge, so the media
-filenames for these three could not be resolved automatically:
+*Solder techniques for IR sensor products* is assembly guidance for putting the part on a
+board. This repo is a software product driving a sensor that is already soldered, so the
+note is out of scope — it is listed here only so its absence does not read as an oversight.
 
-- MLX90641 start-up behaviour
-- Solder techniques for IR sensor products
-- Recommendations for a robust I2C communication
-
-The PDFs download fine once the exact `/-/media/files/documents/application-notes/…pdf`
-link is known — it is only the HTML page that is blocked. If one of these becomes relevant,
-open the document page in a browser and grab the link.
+Local copies of the notes that are in hand live in `~/projects/infrared/`.

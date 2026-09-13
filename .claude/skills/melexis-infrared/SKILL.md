@@ -171,6 +171,10 @@ also takes a single pixel rather than an array.
 
 The source is C++, so it is a translation rather than a transcription when porting to JS.
 
+The first frames after power-on carry a thermal transient and miss the temporal filter's
+previous frame; Melexis says to skip the first and use the 4th and 5th. See
+`references/mlx90641-start-up.md`, which also covers duty-cycling the part by switching VDD.
+
 ## Throughput is the design constraint for the arrays
 
 A 90640 frame is 1668 bytes and a 90642 image 1536, which the board returns as
