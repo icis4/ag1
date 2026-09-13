@@ -224,13 +224,20 @@
       Ea: 0x2424, Eb: 0x2426, Fa: 0x2428, Fb: 0x242a, Ga: 0x242c,
       Gb: 0x242e, Ka: 0x242f,
       Ha: 0x2481, Hb: 0x2482,
-      eeCtrl: 0x24d4,
+      meas1: 0x24e1,
+      control: 0x3001,
+      command: 0x3005,
       status: 0x3fff,
       ram: 0x4000,
     };
 
     const STAT_DATA_RDY = 0x0001;
     const STAT_CYCLE_POS = 0x007C;    // GENMASK(6,2)
+
+    /* REG_CONTROL fields: mode[1:0] at bits 2:1, meas_select at bits 8:4. */
+    const CFG_PWR_MASK = 0x0006, PWR_HALT = 0x0000, PWR_STEP = 0x0004, PWR_CONTINUOUS = 0x0006;
+    const CFG_MTYP_MASK = 0x01F0, MTYP_MEDICAL = 0x0000;
+    const RESET_CMD = 0x0006;
     const DSPv5 = 0x05;
     const REF_3 = 12.0, REF_12 = 12.0;
     const POW10 = 1e10;
@@ -319,7 +326,7 @@
     const state = {
       port: null, writer: null, reader: null, readLoop: null,
       rxBuffer: "", waiters: [],
-      streaming: false, cal: null,
+      streaming: false, cal: null, refreshMs: 500,
       samples: [],          // { t, object, ambient }
       hoverIndex: -1,
       lastSampleAt: 0,
@@ -412,6 +419,29 @@
 
     const RATE_HZ = ["0.5 Hz", "1 Hz", "2 Hz", "4 Hz", "8 Hz", "16 Hz", "32 Hz", "64 Hz"];
 
+    /* This page reads in continuous medical mode, which is also the factory
+     * default — but a part left in (sleeping) step mode by other software never
+     * raises NEW_DATA on its own, and the only symptom here would be a bare
+     * timeout. Mirrors mlx90632_set_meas_type(), addressed reset included. */
+    async function selectContinuousMedical() {
+      const current = await readReg(ADDR.control);
+      if ((current & CFG_MTYP_MASK) === MTYP_MEDICAL && (current & CFG_PWR_MASK) === PWR_CONTINUOUS) {
+        return;
+      }
+      log(`Control register is ${hex(current)}; switching to continuous medical mode.`);
+
+      // Addressed reset: step mode first, then the reset command.
+      await writeReg(ADDR.control, (current & ~CFG_PWR_MASK) | PWR_STEP);
+      await writeReg(ADDR.command, RESET_CMD);
+      await new Promise(resolve => setTimeout(resolve, 1));
+
+      const halted = await readReg(ADDR.control);
+      await writeReg(ADDR.control, (halted & ~CFG_MTYP_MASK & ~CFG_PWR_MASK) | MTYP_MEDICAL | PWR_HALT);
+
+      const settled = await readReg(ADDR.control);
+      await writeReg(ADDR.control, (settled & ~CFG_PWR_MASK) | PWR_CONTINUOUS);
+    }
+
     async function initSensor() {
       const version = await readReg(ADDR.eeVersion);
       if ((version & 0x00FF) !== DSPv5) {
@@ -426,10 +456,16 @@
       const status = await readReg(ADDR.status);
       await writeReg(ADDR.status, status & ~STAT_DATA_RDY);
 
-      const ctrl = await readReg(ADDR.eeCtrl);
-      const rate = (ctrl & 0x0700) >> 8;
-      ui.infoRate.textContent = RATE_HZ[rate] ?? `code ${rate}`;
-      ui.infoMeas.textContent = "Medical";
+      await selectContinuousMedical();
+
+      /* The refresh rate lives in EE_MEAS_1/EE_MEAS_2 bits [10:8]. EE_CTRL
+       * (0x24d4) is only the power-on copy of REG_CONTROL — its bits 8:4 are
+       * meas_select, so reading a rate out of it yields a plausible but wrong
+       * number. */
+      const rate = ((await readReg(ADDR.meas1)) & 0x0700) >> 8;
+      state.refreshMs = Math.round(2000 / Math.pow(2, rate));
+      ui.infoRate.textContent = `${RATE_HZ[rate] ?? `code ${rate}`} (${state.refreshMs} ms)`;
+      ui.infoMeas.textContent = "Medical, continuous";
 
       const cal = {
         P_R: await readReg32(ADDR.P_R), P_G: await readReg32(ADDR.P_G),
@@ -449,7 +485,9 @@
       const before = await readReg(ADDR.status);
       await writeReg(ADDR.status, before & ~STAT_DATA_RDY);
 
-      await scpi(`:I2C:WaitMask ${hex(SLAVE)},${hex(ADDR.status)},${hex(STAT_DATA_RDY)},2500,2000`, 4000);
+      const waitMs = Math.max(500, state.refreshMs * 3);
+      await scpi(`:I2C:WaitMask ${hex(SLAVE)},${hex(ADDR.status)},${hex(STAT_DATA_RDY)},${waitMs},2000`,
+                 waitMs + 1500);
 
       const status = await readReg(ADDR.status);
       const cyclePosition = (status & STAT_CYCLE_POS) >> 2;
