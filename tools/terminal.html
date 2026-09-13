@@ -6,12 +6,12 @@
   <meta name="description" content="USB CDC Serial Communication Terminal — connect to USB serial devices directly from your browser using the Web Serial API.">
   <title>USB CDC Terminal — Web Serial Communication</title>
   <meta name="theme-color" content="#0b0e17">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="manifest" href="../manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
   <!-- Ambient background effects -->
@@ -41,7 +41,7 @@
           <span id="connectionIndicator" class="status-dot status-dot--disconnected"></span>
           <span id="connectionLabel" class="status-label">Disconnected</span>
         </div>
-        <a class="topbar__home" href="index.html" title="Back to tools">
+        <a class="topbar__home" href="../" title="Back to tools">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
             <path d="M3 11l9-8 9 8M5 10v10a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V10"/>
           </svg>
@@ -251,12 +251,12 @@
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js").catch(() => {
+        navigator.serviceWorker.register("../service-worker.js").catch(() => {
           /* Offline support is optional; the pages work without it. */
         });
       });
     }
   </script>
-  <script src="js/app.js"></script>
+  <script src="../js/app.js"></script>
 </body>
 </html>

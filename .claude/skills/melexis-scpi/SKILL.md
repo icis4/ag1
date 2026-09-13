@@ -44,7 +44,7 @@ prompt is the only reliable framing signal.
 
 **No firmware echoes.** The "Local echo" toggle is the only thing making typed commands visible.
 
-**LF is the only terminator safe on all three.** Keep `LF` selected by default in `terminal.html`.
+**LF is the only terminator safe on all three.** Keep `LF` selected by default in `tools/terminal.html`.
 
 ## Per-firmware divergences that bite
 

@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="manifest" href="../manifest.webmanifest">
   <style>
     /* Shared design system with index.html / terminal.html */
     :root {
@@ -358,7 +358,7 @@
   <div class="bg-glow bg-glow--2"></div>
 
   <main class="shell">
-    <a class="home-link" href="index.html">
+    <a class="home-link" href="../">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
            stroke-linecap="round" stroke-linejoin="round">
         <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -1505,7 +1505,7 @@
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js").catch((error) => {
+        navigator.serviceWorker.register("../service-worker.js").catch((error) => {
           log(`Service worker registration failed: ${error.message}`);
         });
       });

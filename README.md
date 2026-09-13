@@ -7,8 +7,8 @@ step, no drivers. Everything runs client-side from a static page.
 
 | Tool | Page | Uses |
 |---|---|---|
-| SCPI Terminal | [terminal.html](terminal.html) | Web Serial |
-| DFU Updater | [dfuupdate.html](dfuupdate.html) | WebUSB |
+| SCPI Terminal | [tools/terminal.html](tools/terminal.html) | Web Serial |
+| DFU Updater | [tools/dfuupdate.html](tools/dfuupdate.html) | WebUSB |
 | Pressure | [pressure/](pressure/) | Web Serial → I2C/SPI |
 | Infrared | [fir/](fir/) | Web Serial → I2C |
 
@@ -108,8 +108,9 @@ pages during development, so the cache here is only an offline fallback. If that
 
 ```
 index.html            frontpage and install prompt
-terminal.html         SCPI terminal markup
-dfuupdate.html        DFU updater, self-contained
+tools/
+  terminal.html         SCPI terminal markup
+  dfuupdate.html        DFU updater, self-contained
 css/
   style.css             terminal and frontpage styles
   theme.css             shared Bootstrap theme

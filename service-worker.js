@@ -9,8 +9,8 @@ const CACHE = "melexis-io-tools-v1";
 const SHELL = [
   "./",
   "./index.html",
-  "./terminal.html",
-  "./dfuupdate.html",
+  "./tools/terminal.html",
+  "./tools/dfuupdate.html",
   "./pressure/",
   "./pressure/index.html",
   "./pressure/README.md",
