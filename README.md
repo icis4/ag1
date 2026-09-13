@@ -9,7 +9,7 @@ step, no drivers. Everything runs client-side from a static page.
 |---|---|---|
 | SCPI Terminal | [terminal.html](terminal.html) | Web Serial |
 | DFU Updater | [dfuupdate.html](dfuupdate.html) | WebUSB |
-| Pressure | [pressure.html](pressure.html) | Web Serial → I2C/SPI |
+| Pressure | [pressure/](pressure/) | Web Serial → I2C/SPI |
 | Infrared | [fir/](fir/) | Web Serial → I2C |
 
 ## Requirements
@@ -68,8 +68,8 @@ base so the firmware starts.
 ## Pressure
 
 Reads an MLX90835 over I2C or SPI through the Melexis IO board, with a live chart and CSV export.
-Its own help and licence are served from `pressure-README.md` and `pressure-LICENSE`, kept under
-those names so they do not collide with this repo's own files.
+Its own help and licence live beside it in `pressure/` and are fetched at runtime for its Help
+modal.
 
 ## Infrared
 
@@ -109,10 +109,11 @@ terminal.html         SCPI terminal markup
 app.js                terminal logic — serial I/O, rendering, probes
 style.css             terminal and frontpage styles
 dfuupdate.html        DFU updater, self-contained
-pressure.html         MLX90835 readout, Bootstrap-based
-pressure-README.md    Pressure help text, shown in its Help modal
-pressure-LICENSE      Pressure licence, shown in its Help modal
 theme.css             shared Bootstrap theme
+pressure/             MLX90835 pressure sensor
+  index.html            readout, Bootstrap-based
+  README.md             help text, shown in its Help modal
+  LICENSE               licence, shown in its Help modal
 fir/                  far infrared sensors
   index.html            sensor index
   mlx90632.html         MLX90632 thermometer readout

@@ -52,7 +52,7 @@ The two that matter:
 ```
 
 - `<dev>` is the **7-bit** address; the firmware shifts it (`DevAddress <<= 1`). Pass
-  `0x3A` / `0x33` directly, exactly as `pressure.html` passes `0x33` for its own sensor.
+  `0x3A` / `0x33` directly, exactly as `pressure/index.html` passes `0x33` for its own sensor.
   The reference port does the same shift by hand: `#define CHIP_ADDRESS 0x3a << 1`.
 - `<memAddSize>` is `2` for all four chips — 16-bit register addresses.
 - The reply is **comma-separated lowercase hex bytes**, no `0x`, then the usual `\n(OK)>`
@@ -212,7 +212,7 @@ other chips do not.
 
 ## Page conventions
 
-Follow what `pressure.html` already does, since it is the working precedent for driving a
+Follow what `pressure/index.html` already does, since it is the working precedent for driving a
 sensor over this board: connect via Web Serial, `:I2C:INIT`, probe for the chip, show a
 clear "not present" state when the slave does not ACK, and keep a debug log of the SCPI
 exchange.
