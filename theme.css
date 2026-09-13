@@ -238,11 +238,41 @@ a:hover { color: var(--mx-white); text-decoration: underline; }
 }
 
 /* Inputs */
+/* Inputs on the dark palette. The brand sheet this theme came from painted
+   them white, which left a light slab on every dark page that did not override
+   it locally. */
 input[type="text"], input[type="number"], input[type="email"], input[type="file"], select, textarea {
   width: 100%;
-  background: var(--mx-white);
-  color: var(--mx-black);
-  border: 0px solid var(--mx-white);
+  background: var(--clr-surface-2);
+  color: var(--clr-text);
+  border: 1px solid var(--clr-border);
+}
+
+input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus,
+select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--clr-accent);
+  box-shadow: 0 0 0 3px hsla(174, 72%, 52%, .12);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--clr-text-muted);
+}
+
+/* Bootstrap drives these through its own variables. */
+.form-control, .form-select {
+  --bs-body-bg: var(--clr-surface-2);
+  --bs-border-color: var(--clr-border);
+  --bs-body-color: var(--clr-text);
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--clr-accent);
+  box-shadow: 0 0 0 3px hsla(174, 72%, 52%, .12);
+}
+
+.form-control:disabled, .form-select:disabled {
+  opacity: .55;
 }
 
 input[type="checkbox"]:checked {

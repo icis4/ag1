@@ -74,7 +74,7 @@ those names so they do not collide with this repo's own files.
 ## Infrared
 
 Index for the Melexis infrared sensors — MLX90632, MLX90640, MLX90641 and MLX90642 — each read
-over I2C through the Melexis IO board. **MLX90642** is built; the other three are listed as
+over I2C through the Melexis IO board. **MLX90640** and **MLX90642** are built; the other two are listed as
 upcoming rather than linking to pages that do not exist.
 
 The 90642 computes temperatures on the chip, so the page has no calibration maths to run: it reads
@@ -114,6 +114,7 @@ pressure.html         MLX90835 readout, Bootstrap-based
 pressure-README.md    Pressure help text, shown in its Help modal
 pressure-LICENSE      Pressure licence, shown in its Help modal
 infrared.html         infrared sensor index
+mlx90640.html         MLX90640 thermal camera readout
 mlx90642.html         MLX90642 thermal array readout
 theme.css             shared Bootstrap theme
 favicon.svg           shared icon
