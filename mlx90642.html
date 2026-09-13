@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MLX90642 thermal array readout — 32×24 temperatures over I2C through the Melexis IO board.">
+  <title>MLX90642</title>
+  <meta name="theme-color" content="#0b0e17">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="theme.css" rel="stylesheet">
+  <style>
+    body { min-height: 100vh; }
+
+    .shell {
+      width: min(1100px, calc(100vw - 32px));
+      margin: 32px auto;
+    }
+
+    .home-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      padding: 4px 10px 4px 6px;
+      border-radius: var(--mx-radius);
+      color: var(--mx-text-muted);
+      font-size: .75rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color 140ms ease, background 140ms ease;
+    }
+
+    .home-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .home-link:hover { color: var(--mx-text); background: var(--mx-surface); }
+    .home-link:focus-visible { outline: 2px solid var(--mx-accent); outline-offset: 2px; }
+
+    .top-toolbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .top-toolbar h1 { margin: 0; font-size: clamp(1.6rem, 2.6vw, 2.2rem); }
+    .toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .card { border: 1px solid var(--clr-border); border-radius: var(--radius-lg); background: var(--clr-surface); }
+    .card h2 { margin: 0 0 14px; color: var(--clr-text-muted); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+
+    /* The sensor is 32×24; the canvas is scaled up by CSS so one pixel stays
+       one sensor pixel in the backing store. */
+    .thermal-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: hsl(225, 30%, 4%);
+      border: 1px solid var(--clr-border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    #thermal {
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    #thermal.smooth { image-rendering: auto; }
+
+    .thermal-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--clr-text-dim, hsl(210, 10%, 38%));
+      font-size: .8125rem;
+      text-align: center;
+      padding: 16px;
+    }
+
+    .scale-bar {
+      height: 10px;
+      margin-top: 10px;
+      border-radius: 999px;
+      border: 1px solid var(--clr-border-subtle);
+    }
+
+    .scale-ends {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      color: var(--clr-text-muted);
+      font-family: var(--ff-mono);
+      font-size: .6875rem;
+    }
+
+    .readout { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+
+    .stat {
+      padding: 10px 12px;
+      border: 1px solid var(--clr-border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--clr-surface-2);
+      text-align: center;
+    }
+
+    .stat__label { display: block; color: var(--clr-text-muted); font-size: .625rem; text-transform: uppercase; letter-spacing: .08em; }
+    .stat__value { display: block; margin-top: 3px; font-family: var(--ff-mono); font-size: 1.05rem; font-weight: 600; }
+    .stat__value--max { color: var(--clr-warning); }
+    .stat__value--min { color: var(--clr-accent); }
+
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .8125rem; }
+    .kv dt { color: var(--clr-text-muted); font-weight: 400; }
+    .kv dd { margin: 0; font-family: var(--ff-mono); text-align: right; }
+
+    #log {
+      height: 190px;
+      padding: 12px;
+      border: 1px solid var(--clr-border-subtle);
+      border-radius: var(--radius-md);
+      background: hsl(225, 30%, 4%);
+      font-family: var(--ff-mono);
+      font-size: .6875rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--clr-border) transparent;
+    }
+
+    .note { margin: 18px 0 0; color: var(--clr-text-muted); font-size: .75rem; line-height: 1.6; }
+
+    @media (max-width: 575px) {
+      .readout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <a class="home-link" href="infrared.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Infrared
+    </a>
+
+    <div class="top-toolbar">
+      <div>
+        <h1 class="fw-bold">MLX90642</h1>
+        <div class="text-secondary" style="font-size:.8125rem">32 × 24 thermal array — temperatures computed on the chip</div>
+      </div>
+      <div class="toolbar-actions">
+        <button id="btnConnect" class="btn btn-sm btn-primary">Connect</button>
+        <button id="btnStream" class="btn btn-sm btn-outline-secondary" disabled>Start</button>
+        <button id="btnDisconnect" class="btn btn-sm btn-outline-secondary" disabled>Disconnect</button>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-7">
+        <div class="card">
+          <div class="card-body">
+            <h2>Thermal image</h2>
+            <div class="thermal-wrap">
+              <canvas id="thermal" width="32" height="24"></canvas>
+              <div id="thermalEmpty" class="thermal-empty">Connect the Melexis IO board with an MLX90642 on I2C.</div>
+            </div>
+            <div id="scaleBar" class="scale-bar"></div>
+            <div class="scale-ends"><span id="scaleMin">—</span><span id="scaleMax">—</span></div>
+
+            <div class="readout">
+              <div class="stat"><span class="stat__label">Min</span><span id="statMin" class="stat__value stat__value--min">—</span></div>
+              <div class="stat"><span class="stat__label">Centre</span><span id="statCentre" class="stat__value">—</span></div>
+              <div class="stat"><span class="stat__label">Max</span><span id="statMax" class="stat__value stat__value--max">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-5">
+        <div class="card mb-3">
+          <div class="card-body">
+            <h2>Device</h2>
+            <dl class="kv">
+              <dt>Status</dt><dd><span id="badgeConn" class="badge text-bg-secondary">Disconnected</span></dd>
+              <dt>Chip ID</dt><dd id="infoId">—</dd>
+              <dt>Firmware</dt><dd id="infoFw">—</dd>
+              <dt>Refresh rate</dt><dd id="infoRate">—</dd>
+              <dt>Output format</dt><dd id="infoFormat">—</dd>
+              <dt>Measurement</dt><dd id="infoMode">—</dd>
+              <dt>Emissivity</dt><dd id="infoEmis">—</dd>
+              <dt>Ambient (Ta)</dt><dd id="infoTa">—</dd>
+              <dt>Frame</dt><dd id="infoFps">—</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <h2>Display</h2>
+            <div class="row g-2">
+              <div class="col-7">
+                <label class="form-label" for="palette" style="font-size:.75rem">Palette</label>
+                <select id="palette" class="form-select form-select-sm">
+                  <option value="inferno" selected>Inferno</option>
+                  <option value="ironbow">Ironbow</option>
+                  <option value="grey">Greyscale</option>
+                </select>
+              </div>
+              <div class="col-5 d-flex align-items-end">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="smooth">
+                  <label class="form-check-label" for="smooth" style="font-size:.75rem">Smooth</label>
+                </div>
+              </div>
+            </div>
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" id="autoScale" checked>
+              <label class="form-check-label" for="autoScale" style="font-size:.75rem">Auto range</label>
+            </div>
+            <div class="row g-2 mt-1">
+              <div class="col-6">
+                <label class="form-label" for="rangeMin" style="font-size:.75rem">Min °C</label>
+                <input id="rangeMin" class="form-control form-control-sm" type="number" value="20" step="1" disabled>
+              </div>
+              <div class="col-6">
+                <label class="form-label" for="rangeMax" style="font-size:.75rem">Max °C</label>
+                <input id="rangeMax" class="form-control form-control-sm" type="number" value="40" step="1" disabled>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h2>SCPI log</h2>
+            <pre id="log"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      Configuration is read-only here. Refresh rate, emissivity and output format are stored in the
+      sensor's EEPROM and written through a dedicated command shape that is documented in the
+      datasheet rather than in the driver library, so this page reports them but does not change them.
+    </p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+  <script>
+  (() => {
+    "use strict";
+
+    /* Register map, from mlx90642-library/inc/MLX90642.h.
+     * Memory is BYTE addressed with 16-bit words, so a read of N words asks the
+     * board for N*2 bytes: Ta sits at TO + 768*2, which is how the library can
+     * fetch 768 pixels plus Ta in one go. */
+    const ADDR = {
+      id:        0x1230,   // 4 words
+      fwVer:     0xFFF8,   // 2 words
+      refresh:   0x11F0,
+      emissivity:0x11F2,
+      appConfig: 0x11F4,
+      i2cConfig: 0x11FC,
+      slaveAddr: 0x11FE,
+      progress:  0x3C10,
+      flags:     0x3C14,
+      toData:    0x342C,   // 768 words, then Ta
+    };
+
+    const SLAVE = 0x66;            // SA_90642_DEFAULT
+    const PIXELS = 768;
+    const COLS = 32, ROWS = 24;
+    const FLAG_READY = 0x0100;
+    const EMISSIVITY_ONE = 0x4000; // Q14: 0x4000 == 1.0
+    const TEMP_SCALE = 50;         // image data is degC * 50
+    const REF_TIME_MS = 2000;      // refresh period = 2000 >> rateCode
+
+    const els = id => document.getElementById(id);
+    const ui = {
+      btnConnect: els("btnConnect"), btnStream: els("btnStream"), btnDisconnect: els("btnDisconnect"),
+      badgeConn: els("badgeConn"), log: els("log"),
+      canvas: els("thermal"), empty: els("thermalEmpty"),
+      scaleBar: els("scaleBar"), scaleMin: els("scaleMin"), scaleMax: els("scaleMax"),
+      statMin: els("statMin"), statMax: els("statMax"), statCentre: els("statCentre"),
+      infoId: els("infoId"), infoFw: els("infoFw"), infoRate: els("infoRate"),
+      infoFormat: els("infoFormat"), infoMode: els("infoMode"), infoEmis: els("infoEmis"),
+      infoTa: els("infoTa"), infoFps: els("infoFps"),
+      palette: els("palette"), smooth: els("smooth"),
+      autoScale: els("autoScale"), rangeMin: els("rangeMin"), rangeMax: els("rangeMax"),
+    };
+
+    const state = {
+      port: null, writer: null, reader: null, readLoop: null,
+      rxBuffer: "", waiters: [],
+      streaming: false, refreshMs: 500, normalized: false,
+      lastFrameAt: 0,
+    };
+
+    // ---- logging ----------------------------------------------------------
+    function log(message) {
+      const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+      ui.log.textContent += line + "\n";
+      ui.log.scrollTop = ui.log.scrollHeight;
+    }
+
+    // ---- serial -----------------------------------------------------------
+    function notifyWaiters() {
+      const pending = state.waiters;
+      state.waiters = [];
+      for (const resolve of pending) resolve();
+    }
+
+    function waitForData(timeoutMs) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        state.waiters.push(finish);
+        setTimeout(finish, timeoutMs);
+      });
+    }
+
+    function startReadLoop() {
+      const decoder = new TextDecoder();
+      state.readLoop = (async () => {
+        while (state.port && state.port.readable && state.reader) {
+          try {
+            const { value, done } = await state.reader.read();
+            if (done) break;
+            if (value) {
+              state.rxBuffer += decoder.decode(value, { stream: true });
+              notifyWaiters();
+            }
+          } catch {
+            break;
+          }
+        }
+        notifyWaiters();
+      })();
+    }
+
+    /* The prompt is the only reliable end-of-response marker: responses are
+     * free-form text and the firmware does not echo. Tolerate a prompt at the
+     * very start of the buffer and trailing whitespace after '>'. */
+    const PROMPT_RE = /(?:^|\r?\n)\((\w+)\)>\s*$/;
+
+    async function scpi(command, timeoutMs = 2000) {
+      if (!state.writer) throw new Error("Not connected.");
+      state.rxBuffer = "";
+
+      // LF only: the parser strips just the trailing \n, so CR+LF would leave a
+      // stray \r glued to the last argument and the command would be rejected.
+      await state.writer.write(new TextEncoder().encode(command + "\n"));
+
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const match = state.rxBuffer.match(PROMPT_RE);
+        if (match) {
+          const payload = state.rxBuffer.slice(0, match.index);
+          if (match[1] !== "OK") {
+            throw new Error(`${command.split(" ")[0]} → (${match[1]})`);
+          }
+          return payload.trim();
+        }
+        await waitForData(20);
+      }
+      throw new Error(`Timed out waiting for a reply to ${command.split(" ")[0]}`);
+    }
+
+    const hex = n => "0x" + n.toString(16).toUpperCase().padStart(2, "0");
+
+    /* <count> is in BYTES, so a word count doubles. The reply is
+     * comma-separated lowercase hex bytes, MSB first within each word. */
+    async function memRead(address, words) {
+      const payload = await scpi(`:I2C:MemReaD ${hex(SLAVE)},${hex(address)},2,${words * 2}`, 4000);
+      const bytes = payload.split(",");
+      if (bytes.length < words * 2) {
+        throw new Error(`Short read at ${hex(address)}: ${bytes.length} of ${words * 2} bytes`);
+      }
+      const out = new Uint16Array(words);
+      for (let i = 0; i < words; i++) {
+        out[i] = (parseInt(bytes[i * 2], 16) << 8) | parseInt(bytes[i * 2 + 1], 16);
+      }
+      return out;
+    }
+
+    // ---- device -----------------------------------------------------------
+    const RATE_HZ = { 2: "2 Hz", 3: "4 Hz", 4: "8 Hz", 5: "16 Hz", 6: "32 Hz" };
+
+    async function readDeviceInfo() {
+      const id = await memRead(ADDR.id, 4);
+      ui.infoId.textContent = Array.from(id, w => w.toString(16).toUpperCase().padStart(4, "0")).join(" ");
+
+      const fw = await memRead(ADDR.fwVer, 2);
+      ui.infoFw.textContent = `${fw[0] >> 8}.${fw[0] & 0xFF}.${fw[1] >> 8}`;
+
+      const rateCode = (await memRead(ADDR.refresh, 1))[0] & 0x0007;
+      state.refreshMs = REF_TIME_MS >> rateCode;
+      ui.infoRate.textContent = `${RATE_HZ[rateCode] ?? `code ${rateCode}`} (${state.refreshMs} ms)`;
+
+      const appConfig = (await memRead(ADDR.appConfig, 1))[0];
+      state.normalized = (appConfig & 0x0100) !== 0;
+      ui.infoFormat.textContent = state.normalized ? "Normalized" : "Temperature";
+      ui.infoMode.textContent = (appConfig & 0x0800) ? "Step" : "Continuous";
+
+      let emis = (await memRead(ADDR.emissivity, 1))[0];
+      if (emis === 0) emis = EMISSIVITY_ONE;          // the library's own default
+      ui.infoEmis.textContent = (emis / EMISSIVITY_ONE).toFixed(3);
+
+      if (state.normalized) {
+        log("Output format is Normalized, so pixel values are not temperatures.");
+      }
+    }
+
+    /* Reads 768 pixels plus the Ta word that follows them. Reading the block
+     * also clears the data-ready flag, which is how the library does it. */
+    async function readFrame() {
+      const words = await memRead(ADDR.toData, PIXELS + 1);
+      const temps = new Float32Array(PIXELS);
+      for (let i = 0; i < PIXELS; i++) {
+        // Signed, so sub-zero scenes do not wrap round to ~1300 °C.
+        const raw = words[i] > 0x7FFF ? words[i] - 0x10000 : words[i];
+        temps[i] = raw / TEMP_SCALE;
+      }
+      const taRaw = words[PIXELS] > 0x7FFF ? words[PIXELS] - 0x10000 : words[PIXELS];
+      return { temps, ta: taRaw / TEMP_SCALE };
+    }
+
+    // ---- palettes ---------------------------------------------------------
+    // Anchor stops, interpolated into a 256-entry lookup table once.
+    const PALETTES = {
+      inferno: [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[250,193,39],[252,255,164]],
+      ironbow: [[0,0,40],[60,0,110],[140,10,110],[200,50,60],[240,110,20],[255,180,10],[255,230,120],[255,255,255]],
+      grey:    [[8,8,10],[255,255,255]],
+    };
+
+    function buildLut(name) {
+      const stops = PALETTES[name] ?? PALETTES.inferno;
+      const lut = new Uint8ClampedArray(256 * 3);
+      for (let i = 0; i < 256; i++) {
+        const t = (i / 255) * (stops.length - 1);
+        const a = Math.min(Math.floor(t), stops.length - 2);
+        const f = t - a;
+        for (let c = 0; c < 3; c++) {
+          lut[i * 3 + c] = stops[a][c] + (stops[a + 1][c] - stops[a][c]) * f;
+        }
+      }
+      return lut;
+    }
+
+    let lut = buildLut("inferno");
+    const ctx = ui.canvas.getContext("2d");
+    const imageData = ctx.createImageData(COLS, ROWS);
+
+    function paintScaleBar(name) {
+      const stops = PALETTES[name] ?? PALETTES.inferno;
+      const css = stops.map(([r, g, b]) => `rgb(${r},${g},${b})`).join(",");
+      ui.scaleBar.style.background = `linear-gradient(90deg, ${css})`;
+    }
+
+    function render(temps, ta) {
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < PIXELS; i++) {
+        if (temps[i] < min) min = temps[i];
+        if (temps[i] > max) max = temps[i];
+      }
+
+      let lo = min, hi = max;
+      if (!ui.autoScale.checked) {
+        lo = Number(ui.rangeMin.value);
+        hi = Number(ui.rangeMax.value);
+      }
+      if (!(hi > lo)) hi = lo + 1;
+
+      const span = hi - lo;
+      const data = imageData.data;
+      for (let i = 0; i < PIXELS; i++) {
+        const level = Math.max(0, Math.min(255, Math.round(((temps[i] - lo) / span) * 255)));
+        data[i * 4]     = lut[level * 3];
+        data[i * 4 + 1] = lut[level * 3 + 1];
+        data[i * 4 + 2] = lut[level * 3 + 2];
+        data[i * 4 + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      const unit = state.normalized ? "" : " °C";
+      const fmt = v => state.normalized ? v.toFixed(1) : v.toFixed(1) + unit;
+      ui.scaleMin.textContent = fmt(lo);
+      ui.scaleMax.textContent = fmt(hi);
+      ui.statMin.textContent = fmt(min);
+      ui.statMax.textContent = fmt(max);
+      // Average of the four centre pixels, so a single hot pixel cannot define it.
+      const c = (temps[11 * COLS + 15] + temps[11 * COLS + 16] +
+                 temps[12 * COLS + 15] + temps[12 * COLS + 16]) / 4;
+      ui.statCentre.textContent = fmt(c);
+      ui.infoTa.textContent = state.normalized ? "—" : ta.toFixed(1) + " °C";
+
+      const now = performance.now();
+      if (state.lastFrameAt) {
+        ui.infoFps.textContent = `${Math.round(now - state.lastFrameAt)} ms`;
+      }
+      state.lastFrameAt = now;
+      ui.empty.hidden = true;
+    }
+
+    // ---- streaming --------------------------------------------------------
+    async function streamLoop() {
+      while (state.streaming) {
+        try {
+          // Poll the data-ready flag on the board rather than from here: one
+          // command instead of a round trip per poll.
+          await scpi(`:I2C:WaitMask ${hex(SLAVE)},${hex(ADDR.flags)},${hex(FLAG_READY)},${state.refreshMs * 3},1000`,
+                     state.refreshMs * 3 + 2000);
+          const { temps, ta } = await readFrame();
+          render(temps, ta);
+        } catch (error) {
+          if (!state.streaming) break;
+          log(`Frame failed: ${error.message}`);
+          stopStreaming();
+          break;
+        }
+      }
+    }
+
+    function startStreaming() {
+      state.streaming = true;
+      state.lastFrameAt = 0;
+      ui.btnStream.textContent = "Stop";
+      log("Streaming frames.");
+      streamLoop();
+    }
+
+    function stopStreaming() {
+      state.streaming = false;
+      ui.btnStream.textContent = "Start";
+      ui.infoFps.textContent = "—";
+    }
+
+    // ---- connection -------------------------------------------------------
+    function setConnected(connected) {
+      ui.badgeConn.className = connected ? "badge text-bg-success" : "badge text-bg-secondary";
+      ui.badgeConn.textContent = connected ? "Connected" : "Disconnected";
+      ui.btnConnect.disabled = connected;
+      ui.btnStream.disabled = !connected;
+      ui.btnDisconnect.disabled = !connected;
+      if (!connected) {
+        ui.empty.hidden = false;
+        ui.empty.textContent = "Connect the Melexis IO board with an MLX90642 on I2C.";
+      }
+    }
+
+    async function connect() {
+      if (!("serial" in navigator)) {
+        log("Web Serial is unavailable. Use Chrome, Edge or Opera over https:// or http://localhost.");
+        return;
+      }
+
+      try {
+        state.port = await navigator.serial.requestPort();
+        await state.port.open({ baudRate: 115200 });
+        state.writer = state.port.writable.getWriter();
+        state.reader = state.port.readable.getReader();
+        startReadLoop();
+        setConnected(true);
+        log("Serial port open.");
+
+        await scpi(":I2C:INIT");
+        await scpi(":I2C:FREQuency 1000k");
+        log("I2C ready at 1 MHz.");
+
+        await readDeviceInfo();
+        log(`MLX90642 found at ${hex(SLAVE)}.`);
+      } catch (error) {
+        if (error && error.name === "NotFoundError") {
+          log("Port selection cancelled.");
+        } else {
+          log(`Connect failed: ${error.message}`);
+          ui.empty.textContent = "No MLX90642 answered on I2C. Check wiring and the slave address.";
+        }
+        await disconnect();
+      }
+    }
+
+    async function disconnect() {
+      stopStreaming();
+
+      // The read loop owns the lock and releases it; cancel only wakes the
+      // pending read, so wait for the loop before closing the port.
+      if (state.reader) {
+        try { await state.reader.cancel(); } catch { /* already gone */ }
+      }
+      if (state.readLoop) {
+        try { await state.readLoop; } catch { /* reported by the loop */ }
+        state.readLoop = null;
+      }
+      if (state.reader) {
+        try { state.reader.releaseLock(); } catch { /* already released */ }
+        state.reader = null;
+      }
+      if (state.writer) {
+        try { state.writer.releaseLock(); } catch { /* already released */ }
+        state.writer = null;
+      }
+      if (state.port) {
+        try { await state.port.close(); } catch { /* already closed */ }
+        state.port = null;
+      }
+
+      state.rxBuffer = "";
+      setConnected(false);
+    }
+
+    // ---- events -----------------------------------------------------------
+    ui.btnConnect.addEventListener("click", connect);
+    ui.btnDisconnect.addEventListener("click", async () => {
+      await disconnect();
+      log("Disconnected.");
+    });
+    ui.btnStream.addEventListener("click", () => {
+      state.streaming ? stopStreaming() : startStreaming();
+    });
+
+    ui.palette.addEventListener("change", () => {
+      lut = buildLut(ui.palette.value);
+      paintScaleBar(ui.palette.value);
+    });
+    ui.smooth.addEventListener("change", () => {
+      ui.canvas.classList.toggle("smooth", ui.smooth.checked);
+    });
+    ui.autoScale.addEventListener("change", () => {
+      const manual = !ui.autoScale.checked;
+      ui.rangeMin.disabled = !manual;
+      ui.rangeMax.disabled = !manual;
+    });
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js").catch(() => {
+          /* Offline support is optional. */
+        });
+      });
+    }
+
+    paintScaleBar("inferno");
+    setConnected(false);
+    log("Ready. Connect the Melexis IO board, then press Start.");
+  })();
+  </script>
+</body>
+</html>

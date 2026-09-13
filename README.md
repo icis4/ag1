@@ -74,8 +74,13 @@ those names so they do not collide with this repo's own files.
 ## Infrared
 
 Index for the Melexis infrared sensors — MLX90632, MLX90640, MLX90641 and MLX90642 — each read
-over I2C through the Melexis IO board. The per-chip subpages are not built yet; the index lists
-them as upcoming rather than linking to pages that do not exist. The protocol contract for all
+over I2C through the Melexis IO board. **MLX90642** is built; the other three are listed as
+upcoming rather than linking to pages that do not exist.
+
+The 90642 computes temperatures on the chip, so the page has no calibration maths to run: it reads
+768 pixel values plus the ambient word in one I2C transaction and paints them. Its configuration is
+shown but not written — refresh rate, emissivity and output format go through a command shape that
+the datasheet documents and the driver library does not. The protocol contract for all
 four, and the traps in porting their calibration maths, are in
 [.claude/skills/melexis-infrared/SKILL.md](.claude/skills/melexis-infrared/SKILL.md).
 
@@ -109,6 +114,7 @@ pressure.html         MLX90835 readout, Bootstrap-based
 pressure-README.md    Pressure help text, shown in its Help modal
 pressure-LICENSE      Pressure licence, shown in its Help modal
 infrared.html         infrared sensor index
+mlx90642.html         MLX90642 thermal array readout
 theme.css             shared Bootstrap theme
 favicon.svg           shared icon
 manifest.webmanifest  PWA manifest

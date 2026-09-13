@@ -176,14 +176,12 @@ a:hover { color: var(--mx-white); text-decoration: underline; }
   background-color: var(--mx-black);
 }
 
-.button:disabled, button:disabled, .btn:disabled { 
-  opacity: 0.6; 
-  background-color: var(--mx-electric-green-800);
-  cursor: not-allowed; 
-  color: var(--mx-white);
+.button:disabled, button:disabled, .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: grayscale(0.6);
 }
-
-.button:hold
 
 /* Ensure Bootstrap small buttons match standard size */
 .btn-sm {
@@ -194,6 +192,37 @@ a:hover { color: var(--mx-white); text-decoration: underline; }
 
 /* Compact action buttons: Clear, Save..., Send */#clear, #save, #send {
   padding: 0.5rem 0.9rem; /* remove padding for compact look */
+}
+
+/* Bootstrap button variants mapped onto the suite palette. Bootstrap 5.3
+   drives these from its own custom properties, so setting those keeps every
+   state (hover, active, disabled) consistent without fighting specificity. */
+.btn-primary {
+  --bs-btn-bg: var(--clr-accent);
+  --bs-btn-border-color: var(--clr-accent);
+  --bs-btn-color: hsl(225, 30%, 8%);
+  --bs-btn-hover-bg: hsl(174, 72%, 60%);
+  --bs-btn-hover-border-color: hsl(174, 72%, 60%);
+  --bs-btn-hover-color: hsl(225, 30%, 8%);
+  --bs-btn-active-bg: hsl(174, 72%, 46%);
+  --bs-btn-active-border-color: hsl(174, 72%, 46%);
+  --bs-btn-active-color: hsl(225, 30%, 8%);
+  --bs-btn-disabled-bg: var(--clr-accent);
+  --bs-btn-disabled-border-color: var(--clr-accent);
+  --bs-btn-disabled-color: hsl(225, 30%, 8%);
+}
+
+.btn-outline-secondary {
+  --bs-btn-color: var(--clr-text);
+  --bs-btn-border-color: var(--clr-border);
+  --bs-btn-hover-bg: var(--clr-surface-2);
+  --bs-btn-hover-border-color: var(--clr-accent);
+  --bs-btn-hover-color: var(--clr-accent);
+  --bs-btn-active-bg: var(--clr-surface-2);
+  --bs-btn-active-border-color: var(--clr-accent);
+  --bs-btn-active-color: var(--clr-accent);
+  --bs-btn-disabled-color: var(--clr-text-muted);
+  --bs-btn-disabled-border-color: var(--clr-border);
 }
 
 .btn-secondary {
