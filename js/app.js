@@ -182,6 +182,47 @@
     }
   }
 
+
+  /* Web Serial's picker exists to grant permission, not to use it: a board the
+   * user has already authorised for this origin comes back from getPorts()
+   * silently. The suite shares one key for which board that was, so the terminal
+   * and the sensor pages all reopen the same one. */
+  const PORT_KEY = 'melexisio.port';
+
+  function rememberPort(port) {
+    const info = port && port.getInfo ? port.getInfo() : {};
+    if (!Number.isInteger(info.usbVendorId) || !Number.isInteger(info.usbProductId)) return;
+    try {
+      window.localStorage.setItem(PORT_KEY, `${info.usbVendorId.toString(16)}:${info.usbProductId.toString(16)}`);
+    } catch { /* storage unavailable */ }
+  }
+
+  async function authorisedPort() {
+    if (!('serial' in navigator)) return null;
+    let ports;
+    try {
+      ports = await navigator.serial.getPorts();
+    } catch {
+      return null;
+    }
+    if (ports.length === 0) return null;
+    if (ports.length === 1) return ports[0];
+
+    let vid = NaN, pid = NaN;
+    try {
+      const saved = (window.localStorage.getItem(PORT_KEY) || '').split(':');
+      vid = parseInt(saved[0], 16);
+      pid = parseInt(saved[1], 16);
+    } catch { /* storage unavailable */ }
+    if (!Number.isInteger(vid)) return null;   // several boards, no hint: let the user choose
+
+    const matches = ports.filter((port) => {
+      const info = port.getInfo();
+      return info.usbVendorId === vid && info.usbProductId === pid;
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   async function connect() {
     try {
       if (!('serial' in navigator)) {
@@ -193,7 +234,7 @@
       setConnectionState('connecting');
 
       // Request port from user
-      state.port = await navigator.serial.requestPort();
+      state.port = await authorisedPort() || await navigator.serial.requestPort();
 
       // Build serial options
       const options = {
@@ -205,6 +246,7 @@
       };
 
       await state.port.open(options);
+      rememberPort(state.port);
 
       setSidebarOpen(false);
       setConnectionState('connected');
@@ -1130,6 +1172,10 @@
 
 
   // ---- Boot ----
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', async () => {
+    init();
+    // Nothing authorised yet means the Connect button still has to ask.
+    if (await authorisedPort()) connect();
+  });
 
 })();
