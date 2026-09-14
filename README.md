@@ -92,7 +92,12 @@ four, and the traps in porting their calibration maths, are in
 
 ## Triaxis
 
-`triaxis/mlx90396.html` reads the four magnetic pixels, the differential channels, the supply
+`triaxis/mlx90396/` is a copy of [MLX90396-WebUI](https://github.com/wirtyfromtheunknownW/MLX90396-WebUI),
+taken unchanged: a joystick visualiser, an NVRAM register editor and an SCPI terminal, driving
+the part over SPI through a bridge. It is self-contained and shares nothing with the rest of the
+suite.
+
+`triaxis/mlx90396-2.html` reads the four magnetic pixels, the differential channels, the supply
 and the temperature from an MLX90396 over **SPI** — the MS_A0_A1 pin below an eighth of the
 supply straps the part as an SPI slave. Each command is one CS-low full-duplex transfer with a
 CRC-8, and at most six magnetic channels come back per measurement.
@@ -144,7 +149,8 @@ pressure/             pressure sensors
   LICENSE               licence, shown in its Help modal
 triaxis/              magnetic position sensors
   index.html            sensor index
-  mlx90396.html         MLX90396 three-axis readout
+  mlx90396/             MLX90396 Web UI, copied unchanged from a colleague's repo
+  mlx90396-2.html       MLX90396 readout built here
 fir/                  far infrared sensors
   index.html            sensor index
   detect.html           I2C bus scan and chip identification
