@@ -771,42 +771,58 @@
       log(`Using I2C address ${hex(parsed)} on the next connect.`);
     });
 
-    /* Web Serial grants permission per origin, so a port the user picked on the
-     * Detect page is already ours: getPorts() returns it without a picker. The
-     * Open link says which board it was (#vid/#pid) and asks for the connection
-     * with connect=1, so only that flow auto-connects — a page opened directly
-     * still waits for the button. A port can be open in one page at a time, so
-     * Detect closes its own before navigating. */
-    async function autoConnect() {
-      const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-      if (params.get("connect") !== "1" || !("serial" in navigator)) return;
+    /* Once a board has been authorised for this origin, getPorts() hands it back
+     * without a dialog — the picker is only for granting permission in the first
+     * place. The suite remembers which board that was, so every page here reopens
+     * it on load and the dialog never appears again unless the permission is gone
+     * or several boards are authorised and none is the remembered one. */
+    const PORT_KEY = "melexisio.port";
 
-      const vid = parseInt(params.get("vid") ?? "", 16);
-      const pid = parseInt(params.get("pid") ?? "", 16);
+    function rememberPort(port) {
+      const info = port && port.getInfo ? port.getInfo() : {};
+      if (!Number.isInteger(info.usbVendorId) || !Number.isInteger(info.usbProductId)) return;
+      try {
+        localStorage.setItem(PORT_KEY, `${info.usbVendorId.toString(16)}:${info.usbProductId.toString(16)}`);
+      } catch { /* storage unavailable */ }
+    }
 
+    function rememberedIds() {
+      try {
+        const [vid, pid] = (localStorage.getItem(PORT_KEY) ?? "").split(":");
+        return { vid: parseInt(vid, 16), pid: parseInt(pid, 16) };
+      } catch {
+        return {};
+      }
+    }
+
+    async function authorisedPort(preferred = {}) {
+      if (!("serial" in navigator)) return null;
       let ports;
       try {
         ports = await navigator.serial.getPorts();
       } catch {
-        return;
+        return null;
       }
+      if (ports.length === 0) return null;
+      if (ports.length === 1) return ports[0];
 
-      const matches = Number.isInteger(vid) && Number.isInteger(pid)
-        ? ports.filter((port) => {
-            const info = port.getInfo();
-            return info.usbVendorId === vid && info.usbProductId === pid;
-          })
-        : ports;
+      const want = Number.isInteger(preferred.vid) ? preferred : rememberedIds();
+      if (!Number.isInteger(want.vid)) return null;      // several boards, no hint: let the user choose
+      const matches = ports.filter((port) => {
+        const info = port.getInfo();
+        return info.usbVendorId === want.vid && info.usbProductId === want.pid;
+      });
+      return matches.length === 1 ? matches[0] : null;
+    }
 
-      if (matches.length !== 1) {
-        log(matches.length === 0
-          ? "No board is authorised for this page yet; press Connect."
-          : `${matches.length} authorised boards; press Connect to choose one.`);
-        return;
-      }
-
-      log("Reusing the board authorised on the Detect page.");
-      await connect(matches[0]);
+    async function autoConnect() {
+      const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+      const port = await authorisedPort({
+        vid: parseInt(params.get("vid") ?? "", 16),
+        pid: parseInt(params.get("pid") ?? "", 16),
+      });
+      if (!port) return;                                  // nothing authorised yet: the button asks
+      await connect(port);
     }
 
     async function connect(existingPort) {
@@ -816,11 +832,12 @@
       }
 
       try {
-        state.port = existingPort ?? await navigator.serial.requestPort();
+        state.port = existingPort ?? await authorisedPort() ?? await navigator.serial.requestPort();
         await state.port.open({ baudRate: 115200 });
         state.writer = state.port.writable.getWriter();
         state.reader = state.port.readable.getReader();
         startReadLoop();
+        rememberPort(state.port);
         setConnected(true);
         log("Serial port open.");
 

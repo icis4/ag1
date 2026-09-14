@@ -594,18 +594,73 @@
       }
     }
 
-    async function connect() {
+    /* Once a board has been authorised for this origin, getPorts() hands it back
+     * without a dialog — the picker is only for granting permission in the first
+     * place. The suite remembers which board that was, so every page here reopens
+     * it on load and the dialog never appears again unless the permission is gone
+     * or several boards are authorised and none is the remembered one. */
+    const PORT_KEY = "melexisio.port";
+
+    function rememberPort(port) {
+      const info = port && port.getInfo ? port.getInfo() : {};
+      if (!Number.isInteger(info.usbVendorId) || !Number.isInteger(info.usbProductId)) return;
+      try {
+        localStorage.setItem(PORT_KEY, `${info.usbVendorId.toString(16)}:${info.usbProductId.toString(16)}`);
+      } catch { /* storage unavailable */ }
+    }
+
+    function rememberedIds() {
+      try {
+        const [vid, pid] = (localStorage.getItem(PORT_KEY) ?? "").split(":");
+        return { vid: parseInt(vid, 16), pid: parseInt(pid, 16) };
+      } catch {
+        return {};
+      }
+    }
+
+    async function authorisedPort(preferred = {}) {
+      if (!("serial" in navigator)) return null;
+      let ports;
+      try {
+        ports = await navigator.serial.getPorts();
+      } catch {
+        return null;
+      }
+      if (ports.length === 0) return null;
+      if (ports.length === 1) return ports[0];
+
+      const want = Number.isInteger(preferred.vid) ? preferred : rememberedIds();
+      if (!Number.isInteger(want.vid)) return null;      // several boards, no hint: let the user choose
+      const matches = ports.filter((port) => {
+        const info = port.getInfo();
+        return info.usbVendorId === want.vid && info.usbProductId === want.pid;
+      });
+      return matches.length === 1 ? matches[0] : null;
+    }
+
+    async function autoConnect() {
+      const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+      const port = await authorisedPort({
+        vid: parseInt(params.get("vid") ?? "", 16),
+        pid: parseInt(params.get("pid") ?? "", 16),
+      });
+      if (!port) return;                                  // nothing authorised yet: the button asks
+      await connect(port);
+    }
+
+    async function connect(existingPort) {
       if (!("serial" in navigator)) {
         log("Web Serial is unavailable. Use Chrome, Edge or Opera over https:// or http://localhost.");
         return;
       }
 
       try {
-        state.port = await navigator.serial.requestPort();
+        state.port = existingPort ?? await authorisedPort() ?? await navigator.serial.requestPort();
         await state.port.open({ baudRate: 115200 });
         state.writer = state.port.writable.getWriter();
         state.reader = state.port.readable.getReader();
         startReadLoop();
+        rememberPort(state.port);
         setConnected(true);
         log("Serial port open.");
 
@@ -638,13 +693,14 @@
       setConnected(false);
     }
 
-    ui.btnConnect.addEventListener("click", connect);
+    ui.btnConnect.addEventListener("click", () => connect());
     ui.btnScan.addEventListener("click", scan);
     ui.btnDisconnect.addEventListener("click", disconnect);
     window.addEventListener("beforeunload", () => { disconnect(); });
 
     buildBusMap();
     setConnected(false);
+    autoConnect();
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
