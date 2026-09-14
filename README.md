@@ -76,6 +76,13 @@ licence live beside it in `pressure/` and are fetched at runtime for its Help mo
 Index for the Melexis infrared sensors — MLX90632, MLX90640, MLX90641 and MLX90642 — each read
 over I2C through the Melexis IO board. All four are built.
 
+`fir/detect.html` scans the bus before you pick a page: it probes every 7-bit address with a
+one-byte read, then identifies what answered from the same registers the vendor libraries use —
+the DSP version for the 90632, the device-select bit that separates the 90640 from the 90641 at
+their shared 0x33, and the chip ID for the 90642. Every result shows the register values behind
+it, and a chip that was re-addressed is still recognised because each answering address is tested
+against all four signatures.
+
 The 90642 computes temperatures on the chip, so the page has no calibration maths to run: it reads
 768 pixel values plus the ambient word in one I2C transaction and paints them. Its configuration is
 shown but not written — refresh rate, emissivity and output format go through a command shape that
@@ -123,6 +130,7 @@ pressure/             pressure sensors
   LICENSE               licence, shown in its Help modal
 fir/                  far infrared sensors
   index.html            sensor index
+  detect.html           I2C bus scan and chip identification
   mlx90632.html         MLX90632 thermometer readout
   mlx90640.html         MLX90640 thermal camera readout
   mlx90641.html         MLX90641 thermal array readout

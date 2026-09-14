@@ -404,8 +404,12 @@
       const id = await memRead(ADDR.id, 4);
       ui.infoId.textContent = Array.from(id, w => w.toString(16).toUpperCase().padStart(4, "0")).join(" ");
 
+      /* Byte order straight from MLX90642_GetFWver(): the middle field is the
+       * LOW byte of the second word, not the low byte of the first. An early part
+       * may carry no version at all, so an empty pair is reported as such. */
       const fw = await memRead(ADDR.fwVer, 2);
-      ui.infoFw.textContent = `${fw[0] >> 8}.${fw[0] & 0xFF}.${fw[1] >> 8}`;
+      const known = fw.some(w => w !== 0x0000 && w !== 0xFFFF);
+      ui.infoFw.textContent = known ? `${fw[0] >> 8}.${fw[1] & 0xFF}.${fw[1] >> 8}` : "unknown";
 
       const rateCode = (await memRead(ADDR.refresh, 1))[0] & 0x0007;
       state.refreshMs = REF_TIME_MS >> rateCode;
