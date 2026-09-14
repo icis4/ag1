@@ -39,7 +39,7 @@
     .card h2 { margin: 0 0 14px; color: var(--clr-text-muted); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
 
     /* One row per axis: the number for reading, the bar for watching a magnet move. */
-    .axis { display: grid; grid-template-columns: 1.6rem 1fr 6.5rem; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .axis { display: grid; grid-template-columns: 3.2rem 1fr 6.5rem; align-items: center; gap: 12px; margin-bottom: 14px; }
     .axis__name { color: var(--clr-text-muted); font-weight: 600; font-size: .875rem; }
     .axis__track {
       position: relative; height: 12px; border-radius: 6px;
@@ -49,6 +49,13 @@
     .axis__fill { position: absolute; top: 0; bottom: 0; background: var(--mx-accent); transition: left 90ms linear, width 90ms linear; }
     .axis--y .axis__fill { background: hsl(190, 65%, 55%); }
     .axis--z .axis__fill { background: hsl(265, 60%, 62%); }
+    .axis--diff .axis__fill { background: hsl(150, 55%, 48%); }
+    .axis__name { white-space: nowrap; }
+
+    .channels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; font-size: .75rem; }
+    .channels__label { grid-column: 1 / -1; margin-top: 8px; color: var(--clr-text-dim); font-size: .6875rem; }
+    .channels label { color: var(--clr-text-muted); cursor: pointer; }
+    .channels input { margin-right: 4px; }
     .axis__value {
       text-align: right; font-family: 'JetBrains Mono', ui-monospace, monospace;
       font-size: .9375rem; font-variant-numeric: tabular-nums;
@@ -105,13 +112,11 @@
     </div>
 
     <div class="note-card">
-      <strong>The protocol here is the MLX90393/MLX90395 family protocol.</strong> Melexis publishes
-      datasheets for the 90391 to 90395 and the 90397, but not for the 90396, so the command set,
-      the 0x80 command register and the status byte are taken from its documented siblings and have
-      not been confirmed against this part. The readings are raw LSB counts: converting them to
-      microtesla needs the gain and resolution settings, which differ per variant. Treat a working
-      readout as evidence the family protocol applies, and the register panel below as the way to
-      check anything else.
+      Built from <strong>MLX90396 preliminary datasheet V0.5</strong> (8 June 2026). Preliminary
+      means the register map and the command encoding can still move. Two things the page cannot
+      know about your part: whether CRC-8 protection is enabled in its NVRAM (the toggle is
+      below), and the microtesla per LSB, which depends on the configured range — readings are
+      raw LSB counts.
     </div>
 
     <div class="row g-3">
@@ -124,21 +129,7 @@
               <span class="magnitude__unit">LSB, vector magnitude</span>
             </div>
 
-            <div class="axis axis--x">
-              <span class="axis__name">X</span>
-              <span class="axis__track"><span class="axis__zero"></span><span id="barX" class="axis__fill"></span></span>
-              <span id="valX" class="axis__value is-empty">—</span>
-            </div>
-            <div class="axis axis--y">
-              <span class="axis__name">Y</span>
-              <span class="axis__track"><span class="axis__zero"></span><span id="barY" class="axis__fill"></span></span>
-              <span id="valY" class="axis__value is-empty">—</span>
-            </div>
-            <div class="axis axis--z">
-              <span class="axis__name">Z</span>
-              <span class="axis__track"><span class="axis__zero"></span><span id="barZ" class="axis__fill"></span></span>
-              <span id="valZ" class="axis__value is-empty">—</span>
-            </div>
+            <div id="readings"></div>
 
             <div class="text-secondary" style="font-size:.6875rem">
               Bars are scaled to the largest magnitude seen since connecting, so a small field still
@@ -165,8 +156,8 @@
               <button id="btnRegWrite" class="btn btn-sm btn-outline-secondary" disabled>Write</button>
             </div>
             <div class="form-text" style="font-size:.6875rem">
-              Register access is per 16-bit word. Over I2C the byte address is the register shifted
-              left by one, which this page does for you — enter the register number.
+              Register access is per 16-bit word and the register number goes on the wire as it is.
+              Values are 16-bit; the NVRAM map starts around 0x10.
             </div>
           </div>
         </div>
@@ -195,26 +186,26 @@
 
         <div class="card mb-3">
           <div class="card-body">
-            <h2>Measure</h2>
-            <div class="form-check">
-              <input id="axT" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="axT" style="font-size:.75rem">Temperature</label>
+            <h2>Channels</h2>
+            <div id="channels" class="channels"></div>
+            <div id="channelCount" class="form-text" style="font-size:.6875rem">
+              0 of 6 magnetic measurements selected.
             </div>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h2>Protocol</h2>
             <div class="form-check">
-              <input id="axX" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="axX" style="font-size:.75rem">X</label>
-            </div>
-            <div class="form-check">
-              <input id="axY" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="axY" style="font-size:.75rem">Y</label>
-            </div>
-            <div class="form-check">
-              <input id="axZ" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="axZ" style="font-size:.75rem">Z</label>
+              <input id="useCrc" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="useCrc" style="font-size:.75rem">
+                CRC-8 enabled on the part
+              </label>
             </div>
             <div class="form-text" style="font-size:.6875rem">
-              The zyxt field of the measurement command. Deselecting an axis leaves it out of both
-              the measurement and the reply.
+              NV_COMM_CRC decides this, and it cannot be read without talking to the part first.
+              If every command comes back rejected, try the other setting.
             </div>
           </div>
         </div>
@@ -233,31 +224,64 @@
   (() => {
     "use strict";
 
-    /* ------------------------------------------------------------------
-     * Protocol from the MLX90393 / MLX90395 datasheets, which the 90396 is
-     * assumed to follow — Melexis publishes no datasheet for this part.
+    /* Protocol from the MLX90396 preliminary datasheet V0.5.
      *
-     * Over I2C a command is written to register 0x80 and the reply is read
-     * back after a repeated start, which is exactly what :I2C:EXCHange does:
-     *   :I2C:EXCHange <dev>,<bytes to read>,<bytes to write>…
-     * Commands are 0b<op><zyxt>: SM 0b0011, EX 0b1000, RT 0b1111.
-     * Register access is word-wise and the I2C byte address is register << 1.
-     * ------------------------------------------------------------------ */
+     * A command is written to register 0x80 and the reply read back after a
+     * repeated start, which is what :I2C:EXCHange does — read count first, then
+     * the bytes to write. Commands carry a channel bitmap across three bytes and
+     * an optional CRC-8 byte:
+     *   SM   0b0011 X0 Y0 Z0 X1 | Y1 Z1 X2 Y2 Z2 X3 Y3 Z3 | X02 Y02 Z02 X13 Y13 Z13 VDD d | CRC
+     *   RM   0b0100 T000 | CRC            EX  0b1000 <target mode> | CRC
+     *   RR   0b0101 dddd | REG | CRC      WR  0b0110 dddd | REG | DATA hi | DATA lo | CRC
+     * At most six magnetic measurements can be read in one go.
+     *
+     * The CRC-8 is poly 0x2F, init 0xFF, final XOR 0xFF, taken over the whole
+     * message including the I2C address byte with its R/W bit. Both worked
+     * examples in the datasheet (0x82 for a reset in I2C, 0x65 in SPI) come out
+     * of exactly those parameters — its numbered steps describe the AAA variant,
+     * which uses init and XOR of 0x00 instead and yields 0x14 for the same frame.
+     */
 
-    const DEFAULT_SLAVE = 0x0C;
+    const DEFAULT_SLAVE = 0x12;              // NV_COMM_I2C_ADDR default
     const CMD_REG = 0x80;
-    const CMD_SM = 0x30, CMD_EX = 0x80, CMD_RT = 0xF0;
-    const STAT_DRDY = 0x01, STAT_RST = 0x02, STAT_OVF = 0x04, STAT_ERR = 0x08;
+    const CMD_SM = 0x30, CMD_RM = 0x40, CMD_RR = 0x50, CMD_WR = 0x60;
+    const CMD_EX = 0x80, CMD_RT = 0xF0;
+    const EX_READY = 0x00;
+    const STAT_DRDY = 0x01, STAT_WARN = 0x02, STAT_ERROR = 0x04;
+    const MAX_MAGNETIC = 6;
+
+    /* Channel order is fixed: this is the order of the command bitmap and of the
+     * words in the reply. `bit` is the position counted from the top of the
+     * three-byte selection field. */
+    const CHANNELS = [
+      { key: "X0",  label: "X0",  bit: 0,  group: "Pixel 0", kind: "x" },
+      { key: "Y0",  label: "Y0",  bit: 1,  group: "Pixel 0", kind: "y" },
+      { key: "Z0",  label: "Z0",  bit: 2,  group: "Pixel 0", kind: "z" },
+      { key: "X1",  label: "X1",  bit: 3,  group: "Pixel 1", kind: "x" },
+      { key: "Y1",  label: "Y1",  bit: 4,  group: "Pixel 1", kind: "y" },
+      { key: "Z1",  label: "Z1",  bit: 5,  group: "Pixel 1", kind: "z" },
+      { key: "X2",  label: "X2",  bit: 6,  group: "Pixel 2", kind: "x" },
+      { key: "Y2",  label: "Y2",  bit: 7,  group: "Pixel 2", kind: "y" },
+      { key: "Z2",  label: "Z2",  bit: 8,  group: "Pixel 2", kind: "z" },
+      { key: "X3",  label: "X3",  bit: 9,  group: "Pixel 3", kind: "x" },
+      { key: "Y3",  label: "Y3",  bit: 10, group: "Pixel 3", kind: "y" },
+      { key: "Z3",  label: "Z3",  bit: 11, group: "Pixel 3", kind: "z" },
+      { key: "X02", label: "ΔX02", bit: 12, group: "Differential", kind: "diff" },
+      { key: "Y02", label: "ΔY02", bit: 13, group: "Differential", kind: "diff" },
+      { key: "Z02", label: "ΔZ02", bit: 14, group: "Differential", kind: "diff" },
+      { key: "X13", label: "ΔX13", bit: 15, group: "Differential", kind: "diff" },
+      { key: "Y13", label: "ΔY13", bit: 16, group: "Differential", kind: "diff" },
+      { key: "Z13", label: "ΔZ13", bit: 17, group: "Differential", kind: "diff" },
+      { key: "VDD", label: "VDD", bit: 18, group: "Supply", kind: "diff" },
+    ];
 
     const els = id => document.getElementById(id);
     const ui = {
       btnConnect: els("btnConnect"), btnStream: els("btnStream"), btnDisconnect: els("btnDisconnect"),
       badgeConn: els("badgeConn"), log: els("log"), slaveAddr: els("slaveAddr"),
-      heroMag: els("heroMag"),
-      barX: els("barX"), barY: els("barY"), barZ: els("barZ"),
-      valX: els("valX"), valY: els("valY"), valZ: els("valZ"),
+      heroMag: els("heroMag"), readings: els("readings"),
+      channels: els("channels"), channelCount: els("channelCount"), useCrc: els("useCrc"),
       infoStatus: els("infoStatus"), infoTemp: els("infoTemp"), infoSample: els("infoSample"),
-      axT: els("axT"), axX: els("axX"), axY: els("axY"), axZ: els("axZ"),
       regAddr: els("regAddr"), regValue: els("regValue"),
       btnRegRead: els("btnRegRead"), btnRegWrite: els("btnRegWrite"),
     };
@@ -267,12 +291,10 @@
       rxBuffer: "", waiters: [],
       slave: DEFAULT_SLAVE,
       streaming: false, scale: 1, lastSampleAt: 0,
+      selected: new Set(["X0", "Y0", "Z0"]),
+      rows: new Map(),
+      temperature: true,
     };
-
-    function log(message) {
-      ui.log.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
-      ui.log.scrollTop = ui.log.scrollHeight;
-    }
 
     // ---- serial ----
     function notifyWaiters() {
@@ -329,117 +351,207 @@
     const s16 = v => (v > 32767 ? v - 65536 : v);
 
     // ---- chip ----
-    async function exchange(readCount, writeBytes) {
-      const payload = await scpi(
-        `:I2C:EXCHange ${hex(state.slave)},${readCount},${writeBytes.map(hex).join(",")}`);
-      const bytes = payload.split(",").filter(b => b.trim()).map(b => parseInt(b, 16));
-      if (bytes.length < readCount) throw new Error(`short reply: ${bytes.length} of ${readCount} bytes`);
-      return bytes;
+    function crc8(bytes) {
+      let crc = 0xFF;                                   // init; AAA parts use 0x00
+      for (const byte of bytes) {
+        crc ^= byte;
+        for (let i = 0; i < 8; i++) {
+          crc = (crc & 0x80) ? ((crc << 1) ^ 0x2F) & 0xFF : (crc << 1) & 0xFF;
+        }
+      }
+      return crc ^ 0xFF;                                // final XOR; 0x00 on AAA parts
     }
 
-    const describeStatus = s => {
+    /* The CRC covers the address byte as it appears on the wire, so the write
+     * phase and the read phase are two different messages with two CRCs. */
+    const writeCrc = (bytes) => crc8([state.slave << 1, ...bytes]);
+
+    async function exchange(readCount, writeBytes) {
+      const payload = ui.useCrc.checked
+        ? [...writeBytes, writeCrc(writeBytes)]
+        : writeBytes;
+      const want = readCount + (ui.useCrc.checked ? 1 : 0);
+      const reply = await scpi(
+        `:I2C:EXCHange ${hex(state.slave)},${want},${payload.map(hex).join(",")}`);
+      const bytes = reply.split(",").filter(b => b.trim()).map(b => parseInt(b, 16));
+      if (bytes.length < want) throw new Error(`short reply: ${bytes.length} of ${want} bytes`);
+
+      if (ui.useCrc.checked) {
+        const expected = crc8([(state.slave << 1) | 1, ...bytes.slice(0, readCount)]);
+        const received = bytes[readCount];
+        if (expected !== received) {
+          log(`CRC mismatch: expected ${hex2(expected)}, got ${hex2(received)}`);
+        }
+      }
+      return bytes.slice(0, readCount);
+    }
+
+    const describeStatus = (s) => {
       const flags = [];
       if (s & STAT_DRDY) flags.push("DRDY");
-      if (s & STAT_RST) flags.push("RST");
-      if (s & STAT_OVF) flags.push("OVF");
-      if (s & STAT_ERR) flags.push("ERR");
-      return `${hex2(s)}${flags.length ? ` (${flags.join(" ")})` : ""}`;
+      if (s & STAT_WARN) flags.push("WARN");
+      if (s & STAT_ERROR) flags.push("ERROR");
+      const mode = ["exit/memory", "WOC", "burst", "single"][(s >> 6) & 0x03];
+      return `${hex2(s)} · ${mode}${flags.length ? ` · ${flags.join(" ")}` : ""}`;
     };
 
-    async function command(byte) {
-      const [status] = await exchange(1, [CMD_REG, byte]);
+    const selectedChannels = () => CHANNELS.filter(c => state.selected.has(c.key));
+    const magneticCount = () => selectedChannels().filter(c => c.key !== "VDD").length;
+
+    /* The 19 selection bits sit in the low nibble of the first command byte and
+     * the whole of the next two, MSB first, with one don't-care bit at the end. */
+    function selectionBytes() {
+      let field = 0;
+      for (const channel of selectedChannels()) field |= 1 << (18 - channel.bit);
+      return [(field >> 15) & 0x0F, (field >> 7) & 0xFF, (field << 1) & 0xFF];
+    }
+
+    async function command(first, rest = []) {
+      const [status] = await exchange(1, [CMD_REG, first, ...rest]);
       ui.infoStatus.textContent = describeStatus(status);
       return status;
     }
 
-    function zyxt() {
-      return (ui.axZ.checked ? 0x8 : 0) | (ui.axY.checked ? 0x4 : 0)
-           | (ui.axX.checked ? 0x2 : 0) | (ui.axT.checked ? 0x1 : 0);
+    async function startMeasurement() {
+      const [sel1, sel2, sel3] = selectionBytes();
+      return command(CMD_SM | sel1, [sel2, sel3]);
     }
 
-    /* The reply is the status byte followed by one word per selected component,
-     * in the fixed order X, Y, Z, T — whatever was not measured is simply absent. */
+    /* The reply is the status byte, then one 16-bit word per selected channel in
+     * the fixed order above, temperature last when it was requested. */
     async function readMeasurement() {
-      const selected = zyxt();
-      const words = [ui.axX.checked, ui.axY.checked, ui.axZ.checked, ui.axT.checked]
-        .filter(Boolean).length;
-      const bytes = await exchange(1 + words * 2, [CMD_REG]);
+      const channels = selectedChannels();
+      const words = channels.length + (state.temperature ? 1 : 0);
+      const bytes = await exchange(1 + words * 2, [CMD_REG, CMD_RM | (state.temperature ? 0x08 : 0)]);
 
       const status = bytes[0];
       ui.infoStatus.textContent = describeStatus(status);
 
+      const values = new Map();
       let at = 1;
       const next = () => {
         const value = s16((bytes[at] << 8) | bytes[at + 1]);
         at += 2;
         return value;
       };
-      return {
-        status,
-        x: ui.axX.checked ? next() : null,
-        y: ui.axY.checked ? next() : null,
-        z: ui.axZ.checked ? next() : null,
-        t: ui.axT.checked ? next() : null,
-        selected,
-      };
+      for (const channel of channels) values.set(channel.key, next());
+      return { status, values, temperature: state.temperature ? next() : null };
     }
 
     async function readRegister(reg) {
-      const bytes = await exchange(2, [reg << 1]);     // byte address, not word address
-      return (bytes[0] << 8) | bytes[1];
+      const bytes = await exchange(3, [CMD_REG, CMD_RR, reg]);
+      ui.infoStatus.textContent = describeStatus(bytes[0]);
+      return (bytes[1] << 8) | bytes[2];
     }
 
     async function writeRegister(reg, value) {
-      const [status] = await exchange(1, [reg << 1, (value >> 8) & 0xFF, value & 0xFF]);
+      const [status] = await exchange(1, [CMD_REG, CMD_WR, reg, (value >> 8) & 0xFF, value & 0xFF]);
       ui.infoStatus.textContent = describeStatus(status);
       return status;
     }
 
     // ---- display ----
-    function paint(sample) {
-      const values = [sample.x, sample.y, sample.z].filter(v => v !== null);
-      const peak = values.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-      if (peak > state.scale) state.scale = peak;
-
-      const axis = (bar, val, value) => {
-        if (value === null) {
-          val.textContent = "—";
-          val.classList.add("is-empty");
-          bar.style.width = "0%";
-          return;
+    function buildChannelPickers() {
+      ui.channels.replaceChildren();
+      let group = null;
+      for (const channel of CHANNELS) {
+        if (channel.group !== group) {
+          group = channel.group;
+          const label = document.createElement("div");
+          label.className = "channels__label";
+          label.textContent = group;
+          ui.channels.append(label);
         }
-        val.textContent = value;
-        val.classList.remove("is-empty");
-        const half = Math.min(50, (Math.abs(value) / (state.scale || 1)) * 50);
-        bar.style.left = value >= 0 ? "50%" : `${50 - half}%`;
-        bar.style.width = `${half}%`;
-      };
-      axis(ui.barX, ui.valX, sample.x);
-      axis(ui.barY, ui.valY, sample.y);
-      axis(ui.barZ, ui.valZ, sample.z);
+        const label = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = state.selected.has(channel.key);
+        box.addEventListener("change", () => {
+          if (box.checked) state.selected.add(channel.key);
+          else state.selected.delete(channel.key);
+          if (magneticCount() > MAX_MAGNETIC) {
+            box.checked = false;
+            state.selected.delete(channel.key);
+            log(`At most ${MAX_MAGNETIC} magnetic measurements can be read at once.`);
+          }
+          buildReadings();
+        });
+        label.append(box, document.createTextNode(channel.label));
+        ui.channels.append(label);
+      }
 
-      if (values.length) {
-        const magnitude = Math.round(Math.hypot(...values));
-        ui.heroMag.textContent = magnitude;
+      const temp = document.createElement("div");
+      temp.className = "channels__label";
+      temp.textContent = "Temperature";
+      const tempLabel = document.createElement("label");
+      const tempBox = document.createElement("input");
+      tempBox.type = "checkbox";
+      tempBox.checked = state.temperature;
+      tempBox.addEventListener("change", () => { state.temperature = tempBox.checked; });
+      tempLabel.append(tempBox, document.createTextNode("T"));
+      ui.channels.append(temp, tempLabel);
+    }
+
+    function buildReadings() {
+      ui.readings.replaceChildren();
+      state.rows.clear();
+      for (const channel of selectedChannels()) {
+        const row = document.createElement("div");
+        row.className = `axis axis--${channel.kind}`;
+        const name = document.createElement("span");
+        name.className = "axis__name";
+        name.textContent = channel.label;
+        const track = document.createElement("span");
+        track.className = "axis__track";
+        const zero = document.createElement("span");
+        zero.className = "axis__zero";
+        const fill = document.createElement("span");
+        fill.className = "axis__fill";
+        track.append(zero, fill);
+        const value = document.createElement("span");
+        value.className = "axis__value is-empty";
+        value.textContent = "—";
+        row.append(name, track, value);
+        ui.readings.append(row);
+        state.rows.set(channel.key, { fill, value });
+      }
+      ui.channelCount.textContent =
+        `${magneticCount()} of ${MAX_MAGNETIC} magnetic measurements selected.`;
+    }
+
+    function paint(sample) {
+      const magnitudes = [];
+      for (const [key, value] of sample.values) {
+        const row = state.rows.get(key);
+        if (!row) continue;
+        if (Math.abs(value) > state.scale) state.scale = Math.abs(value);
+        row.value.textContent = value;
+        row.value.classList.remove("is-empty");
+        const half = Math.min(50, (Math.abs(value) / (state.scale || 1)) * 50);
+        row.fill.style.left = value >= 0 ? "50%" : `${50 - half}%`;
+        row.fill.style.width = `${half}%`;
+        if (key !== "VDD") magnitudes.push(value);
+      }
+
+      if (magnitudes.length) {
+        ui.heroMag.textContent = Math.round(Math.hypot(...magnitudes));
         ui.heroMag.classList.remove("is-empty");
       }
-      ui.infoTemp.textContent = sample.t === null ? "—" : `${sample.t} LSB`;
+      ui.infoTemp.textContent = sample.temperature === null
+        ? "—"
+        : `${sample.temperature} LSB ≈ ${sample.temperature} °C`;
 
       const now = performance.now();
-      if (state.lastSampleAt) {
-        ui.infoSample.textContent = `${Math.round(now - state.lastSampleAt)} ms`;
-      }
+      if (state.lastSampleAt) ui.infoSample.textContent = `${Math.round(now - state.lastSampleAt)} ms`;
       state.lastSampleAt = now;
     }
 
     // ---- streaming ----
     async function sampleOnce() {
-      await command(CMD_SM | zyxt());
-      // Single measurement mode raises DRDY when the conversion is done; the
-      // datasheets put the worst case in the low milliseconds.
+      await startMeasurement();
       const deadline = Date.now() + 500;
       while (Date.now() < deadline) {
-        const [status] = await exchange(1, [CMD_REG]);
+        const [status] = await exchange(1, [CMD_REG, CMD_RM]);
         if (status & STAT_DRDY) break;
         await new Promise(resolve => setTimeout(resolve, 2));
       }
@@ -460,6 +572,10 @@
     }
 
     function startStreaming() {
+      if (selectedChannels().length === 0) {
+        log("Select at least one channel first.");
+        return;
+      }
       state.streaming = true;
       state.lastSampleAt = 0;
       ui.btnStream.textContent = "Stop";
@@ -472,6 +588,7 @@
       ui.btnStream.textContent = "Start";
       ui.infoSample.textContent = "—";
     }
+
 
     /* The address is not fixed: the Detect page links here with #addr=0x…, and the
      * A0/A1 pins move the part within 0x0C–0x0F. A hash carries it rather than a
@@ -578,11 +695,13 @@
       ui.btnRegRead.disabled = !connected;
       ui.btnRegWrite.disabled = !connected;
       if (!connected) {
-        for (const el of [ui.valX, ui.valY, ui.valZ, ui.heroMag]) {
-          el.textContent = "—";
-          el.classList.add("is-empty");
+        ui.heroMag.textContent = "—";
+        ui.heroMag.classList.add("is-empty");
+        for (const row of state.rows.values()) {
+          row.value.textContent = "—";
+          row.value.classList.add("is-empty");
+          row.fill.style.width = "0%";
         }
-        for (const bar of [ui.barX, ui.barY, ui.barZ]) bar.style.width = "0%";
         ui.infoStatus.textContent = "—";
         ui.infoTemp.textContent = "—";
       }
@@ -610,7 +729,7 @@
 
         // Leave whatever mode the part was left in; only then is it idle enough
         // to answer a measurement command predictably.
-        const status = await command(CMD_EX);
+        const status = await command(CMD_EX | EX_READY);
         log(`Exit mode acknowledged, status ${describeStatus(status)}.`);
         state.scale = 1;
       } catch (error) {
@@ -647,8 +766,8 @@
 
     ui.btnRegRead.addEventListener("click", async () => {
       const reg = parseInt(String(ui.regAddr.value).trim().replace(/^0x/i, ""), 16);
-      if (!Number.isInteger(reg) || reg < 0 || reg > 0x3F) {
-        log("Register must be between 0x00 and 0x3F.");
+      if (!Number.isInteger(reg) || reg < 0 || reg > 0xFF) {
+        log("Register must be between 0x00 and 0xFF.");
         return;
       }
       try {
@@ -663,8 +782,8 @@
     ui.btnRegWrite.addEventListener("click", async () => {
       const reg = parseInt(String(ui.regAddr.value).trim().replace(/^0x/i, ""), 16);
       const value = parseInt(String(ui.regValue.value).trim().replace(/^0x/i, ""), 16);
-      if (!Number.isInteger(reg) || reg < 0 || reg > 0x3F || !Number.isInteger(value) || value < 0 || value > 0xFFFF) {
-        log("Register must be 0x00–0x3F and the value a 16-bit word.");
+      if (!Number.isInteger(reg) || reg < 0 || reg > 0xFF || !Number.isInteger(value) || value < 0 || value > 0xFFFF) {
+        log("Register must be 0x00–0xFF and the value a 16-bit word.");
         return;
       }
       try {
@@ -677,6 +796,8 @@
 
     window.addEventListener("beforeunload", () => { disconnect(); });
 
+    buildChannelPickers();
+    buildReadings();
     applyAddress(initialAddress(), { persist: false });
     setConnected(false);
     autoConnect();

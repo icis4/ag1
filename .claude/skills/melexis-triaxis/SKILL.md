@@ -1,6 +1,6 @@
 ---
 name: melexis-triaxis
-description: Building the Triaxis section — magnetic position sensors (MLX90396 today) read over I2C through the Melexis IO board, using the MLX90393/90395 family command protocol. Load when creating or changing a Triaxis page, decoding the status byte or the zyxt field, or adding another part from this family.
+description: Building the Triaxis section — magnetic position sensors (MLX90396 today) read over I2C through the Melexis IO board. Covers the command set, the three-byte channel bitmap, the CRC-8 and the status byte. Load when creating or changing a Triaxis page, decoding a status byte, or adding another part from this family.
 ---
 
 # Triaxis magnetometer pages
@@ -9,72 +9,71 @@ description: Building the Triaxis section — magnetic position sensors (MLX9039
 `.claude/skills/melexis-infrared/SKILL.md` for the page conventions and
 `.claude/skills/melexis-scpi/SKILL.md` for the transport; neither is repeated here.
 
-## The 90396 has no public datasheet
+## Source
 
-Melexis publishes datasheets for the **MLX90391, 90392, 90393, 90394, 90395 and 90397** — the
-sitemap has no entry for the 90396. Everything below is the **MLX90393/MLX90395 protocol**,
-which the 90396 is assumed to share. It has not been confirmed against the part, and
-`triaxis/mlx90396.html` says so on the page rather than quietly presenting it as fact.
+**MLX90396 preliminary datasheet V0.5, 8 June 2026** — `~/projects/ai/`. Preliminary: the
+register map and the command encoding can still move, so re-check against a newer revision
+before trusting anything here for production.
 
-What is definitely unknown per-variant: the gain and resolution settings, hence the µT per
-LSB, and the temperature conversion. The page shows raw LSB counts for that reason.
+Not to be confused with the MLX90393/90395, whose datasheets are public and whose protocol is
+**similar but not the same**: those take a single command byte with a `zyxt` nibble and shift
+the register address left by one on I2C. The 90396 has four magnetic pixels, a three-byte
+channel bitmap, and plain register numbers.
 
-## Commands (verified in the 90393 and 90395 datasheets)
+## What the part measures
 
-The first command byte is `0b<op><zyxt>`, where the four `zyxt` bits select components:
-bit 3 Z, bit 2 Y, bit 1 X, bit 0 T. `zyxt = 0` means "whatever the configuration says".
+Four Triaxis pixels, so twelve magnetic channels (X0…Z3), six differential channels between
+pixel pairs (ΔX02…ΔZ13), the supply voltage and the temperature. **At most six magnetic
+measurements can be read in one go.** Temperature is 1 LSB/°C with 0 LSB at 0 °C, so the raw
+count is already roughly degrees; the magnetic LSB depends on the configured range, so a page
+that has not read the configuration should show raw counts, not microtesla.
 
-| command | op | note |
-|---|---|---|
-| SB — start burst | `0b0001` | free-running at the configured rate |
-| SWOC — wake on change | `0b0010` | |
-| SM — single measurement | `0b0011` | what a page should use for a readout loop |
-| EX — exit mode | `0b1000 0000` | **the only way out of a mode**; RT during a mode is not allowed |
-| RT — reset | `0b1111 0000` | warm reset, at least 1 ms after EX |
-| HR / HS — memory recall / store | `0b1101` / `0b1110` | after HS wait 15 ms before the next command |
+## Commands
 
-## I2C shape, and how it maps onto the board
+A command goes to **register 0x80** and the reply is read after a repeated start — the board's
+`:I2C:EXCHange <dev>,<bytes to read>,<bytes to write>…` is exactly that shape.
 
-The 7-bit address is `0b00011` then A1, A0 — so **0x0C to 0x0F**, set by pin strapping. Other
-addresses are programmed by Melexis on request.
-
-A command is written to **register 0x80** and the reply read after a repeated start. That is
-exactly what the board's exchange primitive does, with the read count *before* the bytes to
-write (`commands_i2c.c`):
-
-```
-:I2C:EXCHange <dev>,<bytes to read>,<byte to write>[,<byte>…]
-```
-
-- send a command: `:I2C:EXCHange 0x0C,1,0x80,0x3F` → SM with all components, returns the status byte
-- read the result: `:I2C:EXCHange 0x0C,9,0x80` → status, then one 16-bit word per selected
-  component in the order X, Y, Z, T — anything not measured is simply absent, so the byte count
-  must match the `zyxt` used
-- read a register: `:I2C:EXCHange 0x0C,2,<reg << 1>` → two data bytes, no status
-- write a register: `:I2C:EXCHange 0x0C,1,<reg << 1>,<hi>,<lo>` → status
-
-**Register access is word-wise and the I2C byte address is the register shifted left by one.**
-Register 0x12 is byte address 0x24. (Over SPI it is shifted left by *two* instead — do not
-carry the SPI form over.) Words are MSB first.
-
-## Status byte
-
-Returned by nearly every command; RT returns none.
-
-| bit | meaning |
+| command | bytes |
 |---|---|
-| 7-4 | which mode answered: burst sets bit 7 (bits 6:5 are a measurement counter), WOC bit 6, SM bit 5, idle and memory all zero |
-| 3 | CE/DED — command rejected, or a double error detection |
-| 2 | OVF — overflow (SEC after a memory command) |
-| 1 | RST — the part reset since the last read |
-| 0 | DRDY — data ready |
+| SB / SWOC / SM | `0b0001/0b0010/0b0011` + selection[18:15], selection[14:7], selection[6:0]≪1, CRC |
+| RM — read measurement | `0b0100 T000`, CRC |
+| RR — read register | `0b0101 dddd`, REG, CRC |
+| WR — write register | `0b0110 dddd`, REG, DATA hi, DATA lo, CRC |
+| EX — exit mode | `0b1000` + target (0 ready, 1 idle, 2 sleep), CRC |
+| HR / HS — recall / store | `0xD0` / `0xE0`, CRC |
+| RT — reset | `0xF0`, CRC |
 
-A rejected command answers with the status of the mode the part is *currently* in, not the one
-the command implies, with CE set — so "the status looks wrong" usually means the part is still
-in a mode nobody exited.
+The 19 selection bits run X0 Y0 Z0 X1 Y1 Z1 X2 Y2 Z2 X3 Y3 Z3 ΔX02 ΔY02 ΔZ02 ΔX13 ΔY13 ΔZ13
+VDD, MSB first, ending with one don't-care bit. Verified against the datasheet's own example:
+Bz on all four pixels plus both differential Bz gives `0x12 0x49 0x24`.
 
-## Page conventions that differ from the infrared ones
+The reply to RM is the status byte, then one 16-bit word per selected channel **in that same
+order**, temperature last when requested, then the CRC.
 
-Single measurement mode is a three-step loop: SM, poll the status for DRDY, then read. Do not
-poll `:I2C:WaitMask` for this — that helper reads a 16-bit register at an address, while here
-the status is a single byte behind the command register.
+## CRC-8
+
+Poly `0x2F` (Koopman `0x97`), **init 0xFF, final XOR 0xFF**. AAA-variant parts use 0x00 for
+both instead. It covers the whole message including the I2C address byte with its R/W bit, so
+the write phase and the read phase carry different CRCs — `crc8([addr << 1, …])` going out,
+`crc8([(addr << 1) | 1, …])` coming back.
+
+**The datasheet contradicts itself here.** Its figure gives `0x82` for a reset at address 0x13
+and its numbered steps compute `0x14` for the same frame. `0x82` is right for a standard part:
+init/XOR of 0xFF reproduce both `0x82` (I2C) and `0x65` (the SPI example). The steps describe
+the AAA parameters, which is where `0x14` comes from.
+
+Whether CRC is checked at all depends on `NV_COMM_CRC` (register 0x22, bit 14) in that part's
+NVRAM, which cannot be read without first talking to it — so a page needs a toggle, not an
+assumption.
+
+## Addressing and status
+
+Default I2C address is **0x12** (`NV_COMM_I2C_ADDR`, register 0x1E). The MS_A0_A1 pin selects
+SPI or one of four I2C address variants by voltage band — below ⅛ VDD is SPI mode, the four
+bands above it set A0/A1.
+
+Status byte: bits 7:6 are the function ID (0b11 single, 0b10 burst, 0b01 WOC, 0b00 exit or
+memory), bits 5:3 a measurement counter in burst and WOC, then ERROR, INFO/WARN, DRDY. A
+rejected command answers with the status of the mode the part is *currently* in, with ERROR
+set — so a surprising status usually means the part is still in a mode nobody exited. Details
+live in the warning register at 0x42, and reading it clears the flag.
