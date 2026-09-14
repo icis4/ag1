@@ -126,6 +126,20 @@ Do not restate command sets here — they change there. melexis_io has `doc/SCPI
 per-module files; evb and mip have no equivalent index, so read the pattern tables directly
 (`Application/**/commands_*.c`, the `.pattern` fields). The tables always win over the docs.
 
+## Line settings apply to one target only
+
+Over **USB CDC** the line coding Web Serial asks for — baud rate, data bits, stop bits,
+parity, flow control — never reaches the device. The terminal opens at 115200 8N1 and
+`pressure/mlx90835.html` at 921600 7O2, and both work identically because neither setting
+leaves the host. For the Melexis IO board, which is what this suite is built around, a
+serial problem is therefore never a baud problem: look at framing, the LF-only rule, or
+the bus instead.
+
+The exception is **mip-firmware, which also exists in a build that talks over a real UART
+at 4 Mbit/s**. There the baud rate is the difference between working and silence, so the
+terminal keeps the controls — behind an **Advanced** disclosure, since they do nothing for
+the CDC boards — and the list of rates has to reach 4000000.
+
 ## Bus-level failures
 
 When an exchange is intermittent, hangs, or comes back NACKed, the bus itself is a
