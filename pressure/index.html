@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Pressure sensor tools — read Melexis pressure sensors over I2C or SPI through the Melexis IO board.">
+  <title>Pressure Sensors</title>
+  <meta name="theme-color" content="#0b0e17">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --clr-bg:          hsl(225, 30%, 6%);
+      --clr-surface:     hsl(225, 25%, 10%);
+      --clr-border:      hsl(225, 18%, 18%);
+      --clr-text:        hsl(210, 20%, 88%);
+      --clr-text-muted:  hsl(210, 15%, 55%);
+      --clr-text-dim:    hsl(210, 10%, 38%);
+      --clr-accent:      hsl(174, 72%, 52%);
+      --clr-accent-glow: hsla(174, 72%, 52%, .25);
+      --ff-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --radius-sm: 6px;
+      --radius-lg: 14px;
+      --dur-fast: 140ms;
+      --ease-out: cubic-bezier(.2, .8, .3, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      font-family: var(--ff-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient background, matching the other pages */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(hsla(174, 72%, 52%, .04) 1px, transparent 1px),
+        linear-gradient(90deg, hsla(174, 72%, 52%, .04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 40%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 40%, transparent 100%);
+    }
+
+    .bg-glow {
+      position: fixed;
+      width: 520px;
+      height: 520px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: .5;
+      z-index: 0;
+      pointer-events: none;
+      background: var(--clr-accent-glow);
+    }
+
+    .bg-glow--1 { top: -220px; left: -140px; }
+    .bg-glow--2 { bottom: -260px; right: -160px; background: hsla(190, 65%, 45%, .18); }
+
+    main {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 460px;
+      text-align: center;
+    }
+
+    .home-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 4px 10px 4px 6px;
+      border-radius: var(--radius-sm);
+      color: var(--clr-text-muted);
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color var(--dur-fast) var(--ease-out),
+                  background var(--dur-fast) var(--ease-out);
+    }
+
+    .home-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    .home-link:hover { color: var(--clr-text); background: var(--clr-surface); }
+
+    .home-link:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 2px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .brand__icon {
+      width: 30px;
+      height: 30px;
+      color: var(--clr-accent);
+      filter: drop-shadow(0 0 8px var(--clr-accent-glow));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--clr-text), var(--clr-accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      margin: 0 0 32px;
+      color: var(--clr-text-muted);
+      font-size: 0.875rem;
+    }
+
+    .tools {
+      display: grid;
+      gap: 12px;
+    }
+
+    .tool {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 20px;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-lg);
+      color: inherit;
+      text-align: left;
+      text-decoration: none;
+      transition: border-color var(--dur-fast) var(--ease-out),
+                  transform var(--dur-fast) var(--ease-out),
+                  box-shadow var(--dur-fast) var(--ease-out);
+    }
+
+    .tool:hover {
+      border-color: var(--clr-accent);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px var(--clr-accent-glow);
+    }
+
+    .tool:focus-visible {
+      outline: 2px solid var(--clr-accent);
+      outline-offset: 3px;
+    }
+
+    .tool__icon {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      color: var(--clr-accent);
+    }
+
+    .tool__name {
+      display: block;
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+
+    .tool__desc {
+      display: block;
+      margin-top: 2px;
+      color: var(--clr-text-muted);
+      font-size: 0.75rem;
+    }
+
+    .tool__arrow {
+      margin-left: auto;
+      width: 18px;
+      height: 18px;
+      color: var(--clr-text-muted);
+      transition: transform var(--dur-fast) var(--ease-out),
+                  color var(--dur-fast) var(--ease-out);
+    }
+
+    .tool:hover .tool__arrow {
+      color: var(--clr-accent);
+      transform: translateX(3px);
+    }
+
+    .note {
+      margin: 28px 0 0;
+      color: var(--clr-text-dim);
+      font-size: 0.75rem;
+      line-height: 1.6;
+    }
+
+    .note + .note { margin-top: 10px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tool, .tool__arrow { transition: none; }
+      .tool:hover { transform: none; }
+      .tool:hover .tool__arrow { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow--1"></div>
+  <div class="bg-glow bg-glow--2"></div>
+
+  <main>
+    <a class="home-link" href="../index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Home
+    </a>
+
+    <div class="brand">
+      <svg class="brand__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 18a8 8 0 1116 0"/>
+        <path d="M12 18l4.5-5"/>
+        <circle cx="12" cy="18" r="1.4" fill="currentColor" stroke="none"/>
+      </svg>
+      <h1>Pressure Sensors</h1>
+    </div>
+    <p class="tagline">Melexis pressure sensors over I2C or SPI.</p>
+
+    <div class="tools">
+      <a class="tool" href="mlx90835.html">
+        <svg class="tool__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 18a8 8 0 1116 0"/>
+          <path d="M12 18l4.5-5"/>
+          <path d="M5.5 13.5l1.2.7M12 9.6V11M18.5 13.5l-1.2.7"/>
+          <circle cx="12" cy="18" r="1.4" fill="currentColor" stroke="none"/>
+        </svg>
+        <span>
+          <span class="tool__name">MLX90835</span>
+          <span class="tool__desc">Pressure readout, live chart and CSV export</span>
+        </span>
+        <svg class="tool__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
+    </div>
+
+    <p class="note">
+      The sensor is read through the Melexis IO board, over either I2C or SPI, so connect that
+      first. The page lets you pick which bus to use.
+    </p>
+  </main>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("../service-worker.js").catch(() => {
+          /* Offline support is optional; the pages work without it. */
+        });
+      });
+    }
+  </script>
+</body>
+</html>

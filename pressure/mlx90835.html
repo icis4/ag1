@@ -8,8 +8,8 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Pressure</title>
-    <meta name="description" content="">
+    <title>MLX90835</title>
+    <meta name="description" content="Read an MLX90835 pressure sensor over I2C or SPI through the Melexis IO board.">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b0e17">
     <!-- Favicon -->
@@ -32,10 +32,17 @@
             min-height: 100vh;
             background-color: var(--mx-bg);
             color: var(--mx-text);
-            background-image: url("styles/background.jpg");
-            background-repeat: no-repeat;
-            background-size: cover;
-            background-position: center center;
+            /* The suite's ambient background, drawn in CSS: two accent glows over a
+             * faint grid, matching the frontpage and the section indexes. This used
+             * to point at styles/background.jpg, which is not in the repo — the
+             * request 404'd and left a flat surface. */
+            background-image:
+                radial-gradient(520px circle at 6% -10%, hsla(174, 72%, 52%, .16), transparent 62%),
+                radial-gradient(560px circle at 104% 110%, hsla(190, 65%, 45%, .13), transparent 62%),
+                linear-gradient(hsla(174, 72%, 52%, .035) 1px, transparent 1px),
+                linear-gradient(90deg, hsla(174, 72%, 52%, .035) 1px, transparent 1px);
+            background-repeat: no-repeat, no-repeat, repeat, repeat;
+            background-size: auto, auto, 40px 40px, 40px 40px;
             background-attachment: fixed;
         }
 
@@ -606,12 +613,12 @@
     <div class="container py-4">
         <div class="top-toolbar mb-3">
             <div>
-                <a class="home-link" href="../">
+                <a class="home-link" href="./">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
                          stroke-linecap="round" stroke-linejoin="round">
                         <path d="M19 12H5M12 19l-7-7 7-7"/>
                     </svg>
-                    Home
+                    Pressure
                 </a>
                 <h1 class="display-5 fw-bold">Pressure</h1>
             </div>

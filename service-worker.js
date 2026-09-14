@@ -13,6 +13,7 @@ const SHELL = [
   "./tools/dfuupdate.html",
   "./pressure/",
   "./pressure/index.html",
+  "./pressure/mlx90835.html",
   "./pressure/README.md",
   "./pressure/LICENSE",
   "./fir/",

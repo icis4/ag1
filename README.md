@@ -67,9 +67,9 @@ base so the firmware starts.
 
 ## Pressure
 
-Reads an MLX90835 over I2C or SPI through the Melexis IO board, with a live chart and CSV export.
-Its own help and licence live beside it in `pressure/` and are fetched at runtime for its Help
-modal.
+`pressure/index.html` lists the sensors and `pressure/mlx90835.html` is the readout: an MLX90835
+over I2C or SPI through the Melexis IO board, with a live chart and CSV export. Its own help and
+licence live beside it in `pressure/` and are fetched at runtime for its Help modal.
 
 ## Infrared
 
@@ -116,8 +116,9 @@ css/
   theme.css             shared Bootstrap theme
 js/
   app.js                terminal logic — serial I/O, rendering, probes
-pressure/             MLX90835 pressure sensor
-  index.html            readout, Bootstrap-based
+pressure/             pressure sensors
+  index.html            sensor index
+  mlx90835.html         MLX90835 readout, Bootstrap-based
   README.md             help text, shown in its Help modal
   LICENSE               licence, shown in its Help modal
 fir/                  far infrared sensors
