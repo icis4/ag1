@@ -95,7 +95,9 @@ four, and the traps in porting their calibration maths, are in
 `triaxis/mlx90396/` is a copy of [MLX90396-WebUI](https://github.com/wirtyfromtheunknownW/MLX90396-WebUI),
 taken unchanged: a joystick visualiser, an NVRAM register editor and an SCPI terminal, driving
 the part over SPI through a bridge. It is self-contained and shares nothing with the rest of the
-suite.
+suite. `triaxis/mlx90396-voxdale/` is the demo build of the same application, copied the same
+way; the two share `mlx_api.js`, `webdesign.css` and `arduino_api.js` byte for byte and differ
+in the interface, the controller and the demo script.
 
 `triaxis/mlx90396-2.html` reads the four magnetic pixels, the differential channels, the supply
 and the temperature from an MLX90396 over **SPI** — the MS_A0_A1 pin below an eighth of the
@@ -150,6 +152,7 @@ pressure/             pressure sensors
 triaxis/              magnetic position sensors
   index.html            sensor index
   mlx90396/             MLX90396 Web UI, copied unchanged from a colleague's repo
+  mlx90396-voxdale/     the Voxdale demo build of the same Web UI, also unchanged
   mlx90396-2.html       MLX90396 readout built here
 fir/                  far infrared sensors
   index.html            sensor index
