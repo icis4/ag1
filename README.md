@@ -90,6 +90,16 @@ the datasheet documents and the driver library does not. The protocol contract f
 four, and the traps in porting their calibration maths, are in
 [.claude/skills/melexis-infrared/SKILL.md](.claude/skills/melexis-infrared/SKILL.md).
 
+## Triaxis
+
+`triaxis/mlx90396.html` reads the three field components and the temperature from an MLX90396
+over I2C. Melexis publishes datasheets for the MLX90391 to MLX90395 and the MLX90397, but not
+for the 90396, so the page implements the documented family protocol — a command written to
+register 0x80, the reply read back after a repeated start, register access word-wise with the
+I2C byte address being the register shifted left by one. The readings are raw LSB counts, since
+converting to microtesla needs the gain and resolution settings. The page says so in place, and
+carries a register panel for checking anything the protocol assumption gets wrong.
+
 ## Running locally
 
 ```bash
@@ -128,6 +138,9 @@ pressure/             pressure sensors
   mlx90835.html         MLX90835 readout, Bootstrap-based
   README.md             help text, shown in its Help modal
   LICENSE               licence, shown in its Help modal
+triaxis/              magnetic position sensors
+  index.html            sensor index
+  mlx90396.html         MLX90396 three-axis readout
 fir/                  far infrared sensors
   index.html            sensor index
   detect.html           I2C bus scan and chip identification

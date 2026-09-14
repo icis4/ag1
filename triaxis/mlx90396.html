@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MLX90396 Triaxis magnetometer readout — three-axis magnetic field over I2C through the Melexis IO board.">
+  <title>MLX90396</title>
+  <meta name="theme-color" content="#0b0e17">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="../css/theme.css" rel="stylesheet">
+  <style>
+    body { min-height: 100vh; }
+    .shell { width: min(1100px, calc(100vw - 32px)); margin: 32px auto; }
+
+    .home-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-bottom: 6px; padding: 4px 10px 4px 6px;
+      border-radius: var(--mx-radius); color: var(--mx-text-muted);
+      font-size: .75rem; font-weight: 500; text-decoration: none;
+      transition: color 140ms ease, background 140ms ease;
+    }
+    .home-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .home-link:hover { color: var(--mx-text); background: var(--mx-surface); }
+    .home-link:focus-visible { outline: 2px solid var(--mx-accent); outline-offset: 2px; }
+
+    .top-toolbar {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+    }
+    .top-toolbar h1 { margin: 0; font-size: clamp(1.6rem, 2.6vw, 2.2rem); }
+    .toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .card { border: 1px solid var(--clr-border); border-radius: var(--radius-lg); background: var(--clr-surface); }
+    .card h2 { margin: 0 0 14px; color: var(--clr-text-muted); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+
+    /* One row per axis: the number for reading, the bar for watching a magnet move. */
+    .axis { display: grid; grid-template-columns: 1.6rem 1fr 6.5rem; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .axis__name { color: var(--clr-text-muted); font-weight: 600; font-size: .875rem; }
+    .axis__track {
+      position: relative; height: 12px; border-radius: 6px;
+      background: var(--mx-bg); border: 1px solid var(--clr-border); overflow: hidden;
+    }
+    .axis__zero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--clr-border); }
+    .axis__fill { position: absolute; top: 0; bottom: 0; background: var(--mx-accent); transition: left 90ms linear, width 90ms linear; }
+    .axis--y .axis__fill { background: hsl(190, 65%, 55%); }
+    .axis--z .axis__fill { background: hsl(265, 60%, 62%); }
+    .axis__value {
+      text-align: right; font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .9375rem; font-variant-numeric: tabular-nums;
+    }
+    .axis__value.is-empty { color: var(--clr-text-dim); }
+
+    .magnitude { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 20px; }
+    .magnitude__value { font-size: clamp(2rem, 5vw, 2.75rem); font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .magnitude__value.is-empty { color: var(--clr-text-dim); }
+    .magnitude__unit { color: var(--clr-text-muted); font-size: .8125rem; }
+
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: .8125rem; }
+    .kv dt { color: var(--clr-text-muted); font-weight: 500; }
+    .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+    .log {
+      margin: 0; padding: 10px 12px; max-height: 200px; overflow: auto;
+      border-radius: var(--mx-radius); background: var(--mx-bg);
+      color: var(--clr-text-muted); font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .6875rem; line-height: 1.55; white-space: pre-wrap;
+    }
+
+    .note-card {
+      border: 1px solid hsl(38, 70%, 30%); background: hsla(38, 70%, 40%, .08);
+      border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 16px;
+      color: var(--clr-text-muted); font-size: .75rem; line-height: 1.6;
+    }
+    .note-card strong { color: var(--clr-text); }
+
+    .regs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .regs .form-control { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <a class="home-link" href="./">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Triaxis
+    </a>
+
+    <div class="top-toolbar">
+      <div>
+        <h1 class="fw-bold">MLX90396</h1>
+        <div class="text-secondary" style="font-size:.8125rem">Triaxis three-axis magnetometer</div>
+      </div>
+      <div class="toolbar-actions">
+        <button id="btnConnect" class="btn btn-sm btn-primary">Connect</button>
+        <button id="btnStream" class="btn btn-sm btn-outline-secondary" disabled>Start</button>
+        <button id="btnDisconnect" class="btn btn-sm btn-outline-secondary" disabled>Disconnect</button>
+      </div>
+    </div>
+
+    <div class="note-card">
+      <strong>The protocol here is the MLX90393/MLX90395 family protocol.</strong> Melexis publishes
+      datasheets for the 90391 to 90395 and the 90397, but not for the 90396, so the command set,
+      the 0x80 command register and the status byte are taken from its documented siblings and have
+      not been confirmed against this part. The readings are raw LSB counts: converting them to
+      microtesla needs the gain and resolution settings, which differ per variant. Treat a working
+      readout as evidence the family protocol applies, and the register panel below as the way to
+      check anything else.
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-8">
+        <div class="card">
+          <div class="card-body">
+            <h2>Magnetic field</h2>
+            <div class="magnitude">
+              <span id="heroMag" class="magnitude__value is-empty">—</span>
+              <span class="magnitude__unit">LSB, vector magnitude</span>
+            </div>
+
+            <div class="axis axis--x">
+              <span class="axis__name">X</span>
+              <span class="axis__track"><span class="axis__zero"></span><span id="barX" class="axis__fill"></span></span>
+              <span id="valX" class="axis__value is-empty">—</span>
+            </div>
+            <div class="axis axis--y">
+              <span class="axis__name">Y</span>
+              <span class="axis__track"><span class="axis__zero"></span><span id="barY" class="axis__fill"></span></span>
+              <span id="valY" class="axis__value is-empty">—</span>
+            </div>
+            <div class="axis axis--z">
+              <span class="axis__name">Z</span>
+              <span class="axis__track"><span class="axis__zero"></span><span id="barZ" class="axis__fill"></span></span>
+              <span id="valZ" class="axis__value is-empty">—</span>
+            </div>
+
+            <div class="text-secondary" style="font-size:.6875rem">
+              Bars are scaled to the largest magnitude seen since connecting, so a small field still
+              shows movement.
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <div class="card-body">
+            <h2>Registers</h2>
+            <div class="regs">
+              <div>
+                <label class="form-label" for="regAddr" style="font-size:.75rem">Register</label>
+                <input id="regAddr" class="form-control form-control-sm" type="text" value="0x00" spellcheck="false" autocomplete="off">
+              </div>
+              <div>
+                <label class="form-label" for="regValue" style="font-size:.75rem">Value</label>
+                <input id="regValue" class="form-control form-control-sm" type="text" value="0x0000" spellcheck="false" autocomplete="off">
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-2">
+              <button id="btnRegRead" class="btn btn-sm btn-outline-secondary" disabled>Read</button>
+              <button id="btnRegWrite" class="btn btn-sm btn-outline-secondary" disabled>Write</button>
+            </div>
+            <div class="form-text" style="font-size:.6875rem">
+              Register access is per 16-bit word. Over I2C the byte address is the register shifted
+              left by one, which this page does for you — enter the register number.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="card mb-3">
+          <div class="card-body">
+            <h2>Device</h2>
+            <dl class="kv">
+              <dt>Status</dt><dd><span id="badgeConn" class="badge text-bg-secondary">Disconnected</span></dd>
+              <dt>Status byte</dt><dd id="infoStatus">—</dd>
+              <dt>Temperature</dt><dd id="infoTemp">—</dd>
+              <dt>Sample</dt><dd id="infoSample">—</dd>
+            </dl>
+
+            <label class="form-label mt-3" for="slaveAddr" style="font-size:.75rem">I2C address</label>
+            <input id="slaveAddr" class="form-control form-control-sm" type="text"
+                   spellcheck="false" autocomplete="off" value="0x0C">
+            <div class="form-text" style="font-size:.6875rem">
+              The family answers on 0x0C to 0x0F, set by the A0 and A1 pins. Detect passes the
+              address it found; the last one used here is remembered. Applies on the next connect.
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h2>Measure</h2>
+            <div class="form-check">
+              <input id="axT" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="axT" style="font-size:.75rem">Temperature</label>
+            </div>
+            <div class="form-check">
+              <input id="axX" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="axX" style="font-size:.75rem">X</label>
+            </div>
+            <div class="form-check">
+              <input id="axY" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="axY" style="font-size:.75rem">Y</label>
+            </div>
+            <div class="form-check">
+              <input id="axZ" class="form-check-input" type="checkbox" checked>
+              <label class="form-check-label" for="axZ" style="font-size:.75rem">Z</label>
+            </div>
+            <div class="form-text" style="font-size:.6875rem">
+              The zyxt field of the measurement command. Deselecting an axis leaves it out of both
+              the measurement and the reply.
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <h2>Debug</h2>
+            <pre id="log" class="log"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+  (() => {
+    "use strict";
+
+    /* ------------------------------------------------------------------
+     * Protocol from the MLX90393 / MLX90395 datasheets, which the 90396 is
+     * assumed to follow — Melexis publishes no datasheet for this part.
+     *
+     * Over I2C a command is written to register 0x80 and the reply is read
+     * back after a repeated start, which is exactly what :I2C:EXCHange does:
+     *   :I2C:EXCHange <dev>,<bytes to read>,<bytes to write>…
+     * Commands are 0b<op><zyxt>: SM 0b0011, EX 0b1000, RT 0b1111.
+     * Register access is word-wise and the I2C byte address is register << 1.
+     * ------------------------------------------------------------------ */
+
+    const DEFAULT_SLAVE = 0x0C;
+    const CMD_REG = 0x80;
+    const CMD_SM = 0x30, CMD_EX = 0x80, CMD_RT = 0xF0;
+    const STAT_DRDY = 0x01, STAT_RST = 0x02, STAT_OVF = 0x04, STAT_ERR = 0x08;
+
+    const els = id => document.getElementById(id);
+    const ui = {
+      btnConnect: els("btnConnect"), btnStream: els("btnStream"), btnDisconnect: els("btnDisconnect"),
+      badgeConn: els("badgeConn"), log: els("log"), slaveAddr: els("slaveAddr"),
+      heroMag: els("heroMag"),
+      barX: els("barX"), barY: els("barY"), barZ: els("barZ"),
+      valX: els("valX"), valY: els("valY"), valZ: els("valZ"),
+      infoStatus: els("infoStatus"), infoTemp: els("infoTemp"), infoSample: els("infoSample"),
+      axT: els("axT"), axX: els("axX"), axY: els("axY"), axZ: els("axZ"),
+      regAddr: els("regAddr"), regValue: els("regValue"),
+      btnRegRead: els("btnRegRead"), btnRegWrite: els("btnRegWrite"),
+    };
+
+    const state = {
+      port: null, writer: null, reader: null, readLoop: null,
+      rxBuffer: "", waiters: [],
+      slave: DEFAULT_SLAVE,
+      streaming: false, scale: 1, lastSampleAt: 0,
+    };
+
+    function log(message) {
+      ui.log.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+      ui.log.scrollTop = ui.log.scrollHeight;
+    }
+
+    // ---- serial ----
+    function notifyWaiters() {
+      const pending = state.waiters;
+      state.waiters = [];
+      for (const resolve of pending) resolve();
+    }
+
+    function waitForData(timeoutMs) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        state.waiters.push(finish);
+        setTimeout(finish, timeoutMs);
+      });
+    }
+
+    function startReadLoop() {
+      const decoder = new TextDecoder();
+      state.readLoop = (async () => {
+        while (state.port && state.port.readable && state.reader) {
+          try {
+            const { value, done } = await state.reader.read();
+            if (done) break;
+            if (value) { state.rxBuffer += decoder.decode(value, { stream: true }); notifyWaiters(); }
+          } catch { break; }
+        }
+        notifyWaiters();
+      })();
+    }
+
+    const PROMPT_RE = /(?:^|\r?\n)\((\w+)\)>\s*$/;
+
+    async function scpi(command, timeoutMs = 3000) {
+      if (!state.writer) throw new Error("Not connected.");
+      state.rxBuffer = "";
+      await state.writer.write(new TextEncoder().encode(command + "\n"));   // LF only
+
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const match = state.rxBuffer.match(PROMPT_RE);
+        if (match) {
+          const payload = state.rxBuffer.slice(0, match.index);
+          if (match[1] !== "OK") throw new Error(`${command.split(" ")[0]} → (${match[1]})`);
+          return payload.trim();
+        }
+        await waitForData(15);
+      }
+      throw new Error(`Timed out waiting for a reply to ${command.split(" ")[0]}`);
+    }
+
+    const hex = n => "0x" + n.toString(16).toUpperCase();
+    const hex2 = n => "0x" + n.toString(16).toUpperCase().padStart(2, "0");
+    const s16 = v => (v > 32767 ? v - 65536 : v);
+
+    // ---- chip ----
+    async function exchange(readCount, writeBytes) {
+      const payload = await scpi(
+        `:I2C:EXCHange ${hex(state.slave)},${readCount},${writeBytes.map(hex).join(",")}`);
+      const bytes = payload.split(",").filter(b => b.trim()).map(b => parseInt(b, 16));
+      if (bytes.length < readCount) throw new Error(`short reply: ${bytes.length} of ${readCount} bytes`);
+      return bytes;
+    }
+
+    const describeStatus = s => {
+      const flags = [];
+      if (s & STAT_DRDY) flags.push("DRDY");
+      if (s & STAT_RST) flags.push("RST");
+      if (s & STAT_OVF) flags.push("OVF");
+      if (s & STAT_ERR) flags.push("ERR");
+      return `${hex2(s)}${flags.length ? ` (${flags.join(" ")})` : ""}`;
+    };
+
+    async function command(byte) {
+      const [status] = await exchange(1, [CMD_REG, byte]);
+      ui.infoStatus.textContent = describeStatus(status);
+      return status;
+    }
+
+    function zyxt() {
+      return (ui.axZ.checked ? 0x8 : 0) | (ui.axY.checked ? 0x4 : 0)
+           | (ui.axX.checked ? 0x2 : 0) | (ui.axT.checked ? 0x1 : 0);
+    }
+
+    /* The reply is the status byte followed by one word per selected component,
+     * in the fixed order X, Y, Z, T — whatever was not measured is simply absent. */
+    async function readMeasurement() {
+      const selected = zyxt();
+      const words = [ui.axX.checked, ui.axY.checked, ui.axZ.checked, ui.axT.checked]
+        .filter(Boolean).length;
+      const bytes = await exchange(1 + words * 2, [CMD_REG]);
+
+      const status = bytes[0];
+      ui.infoStatus.textContent = describeStatus(status);
+
+      let at = 1;
+      const next = () => {
+        const value = s16((bytes[at] << 8) | bytes[at + 1]);
+        at += 2;
+        return value;
+      };
+      return {
+        status,
+        x: ui.axX.checked ? next() : null,
+        y: ui.axY.checked ? next() : null,
+        z: ui.axZ.checked ? next() : null,
+        t: ui.axT.checked ? next() : null,
+        selected,
+      };
+    }
+
+    async function readRegister(reg) {
+      const bytes = await exchange(2, [reg << 1]);     // byte address, not word address
+      return (bytes[0] << 8) | bytes[1];
+    }
+
+    async function writeRegister(reg, value) {
+      const [status] = await exchange(1, [reg << 1, (value >> 8) & 0xFF, value & 0xFF]);
+      ui.infoStatus.textContent = describeStatus(status);
+      return status;
+    }
+
+    // ---- display ----
+    function paint(sample) {
+      const values = [sample.x, sample.y, sample.z].filter(v => v !== null);
+      const peak = values.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      if (peak > state.scale) state.scale = peak;
+
+      const axis = (bar, val, value) => {
+        if (value === null) {
+          val.textContent = "—";
+          val.classList.add("is-empty");
+          bar.style.width = "0%";
+          return;
+        }
+        val.textContent = value;
+        val.classList.remove("is-empty");
+        const half = Math.min(50, (Math.abs(value) / (state.scale || 1)) * 50);
+        bar.style.left = value >= 0 ? "50%" : `${50 - half}%`;
+        bar.style.width = `${half}%`;
+      };
+      axis(ui.barX, ui.valX, sample.x);
+      axis(ui.barY, ui.valY, sample.y);
+      axis(ui.barZ, ui.valZ, sample.z);
+
+      if (values.length) {
+        const magnitude = Math.round(Math.hypot(...values));
+        ui.heroMag.textContent = magnitude;
+        ui.heroMag.classList.remove("is-empty");
+      }
+      ui.infoTemp.textContent = sample.t === null ? "—" : `${sample.t} LSB`;
+
+      const now = performance.now();
+      if (state.lastSampleAt) {
+        ui.infoSample.textContent = `${Math.round(now - state.lastSampleAt)} ms`;
+      }
+      state.lastSampleAt = now;
+    }
+
+    // ---- streaming ----
+    async function sampleOnce() {
+      await command(CMD_SM | zyxt());
+      // Single measurement mode raises DRDY when the conversion is done; the
+      // datasheets put the worst case in the low milliseconds.
+      const deadline = Date.now() + 500;
+      while (Date.now() < deadline) {
+        const [status] = await exchange(1, [CMD_REG]);
+        if (status & STAT_DRDY) break;
+        await new Promise(resolve => setTimeout(resolve, 2));
+      }
+      return readMeasurement();
+    }
+
+    async function streamLoop() {
+      while (state.streaming) {
+        try {
+          paint(await sampleOnce());
+        } catch (error) {
+          if (!state.streaming) break;
+          log(`Reading failed: ${error.message}`);
+          stopStreaming();
+          break;
+        }
+      }
+    }
+
+    function startStreaming() {
+      state.streaming = true;
+      state.lastSampleAt = 0;
+      ui.btnStream.textContent = "Stop";
+      log("Measuring continuously.");
+      streamLoop();
+    }
+
+    function stopStreaming() {
+      state.streaming = false;
+      ui.btnStream.textContent = "Start";
+      ui.infoSample.textContent = "—";
+    }
+
+    /* The address is not fixed: the Detect page links here with #addr=0x…, and the
+     * A0/A1 pins move the part within 0x0C–0x0F. A hash carries it rather than a
+     * query string, so the service worker still matches the cached page offline.
+     * localStorage throws when site data is blocked, so every use is guarded. */
+    const STORAGE_KEY = "melexisio.mlx90396.addr";
+
+    function validAddress(value) {
+      const parsed = parseInt(String(value).trim().replace(/^0x/i, ""), 16);
+      return Number.isInteger(parsed) && parsed >= 0x08 && parsed <= 0x77 ? parsed : null;
+    }
+
+    function initialAddress() {
+      const fromHash = /(?:^|[#&])addr=(?:0x)?([0-9a-f]{1,2})/i.exec(location.hash);
+      if (fromHash) {
+        const parsed = validAddress(fromHash[1]);
+        if (parsed !== null) return parsed;
+      }
+      try {
+        const saved = validAddress(localStorage.getItem(STORAGE_KEY));
+        if (saved !== null) return saved;
+      } catch { /* storage unavailable */ }
+      return DEFAULT_SLAVE;
+    }
+
+    function applyAddress(addr, { persist = true } = {}) {
+      state.slave = addr;
+      ui.slaveAddr.value = hex(addr);
+      if (!persist) return;
+      try { localStorage.setItem(STORAGE_KEY, hex(addr)); } catch { /* storage unavailable */ }
+    }
+
+    ui.slaveAddr.addEventListener("change", () => {
+      const parsed = validAddress(ui.slaveAddr.value);
+      if (parsed === null) {
+        ui.slaveAddr.value = hex(state.slave);
+        log("Address must be 7-bit hex between 0x08 and 0x77.");
+        return;
+      }
+      applyAddress(parsed);
+      log(`Using I2C address ${hex(parsed)} on the next connect.`);
+    });
+
+    /* Once a board has been authorised for this origin, getPorts() hands it back
+     * without a dialog — the picker is only for granting permission in the first
+     * place. The suite shares one key for which board that was. */
+    const PORT_KEY = "melexisio.port";
+
+    function rememberPort(port) {
+      const info = port && port.getInfo ? port.getInfo() : {};
+      if (!Number.isInteger(info.usbVendorId) || !Number.isInteger(info.usbProductId)) return;
+      try {
+        localStorage.setItem(PORT_KEY, `${info.usbVendorId.toString(16)}:${info.usbProductId.toString(16)}`);
+      } catch { /* storage unavailable */ }
+    }
+
+    function rememberedIds() {
+      try {
+        const [vid, pid] = (localStorage.getItem(PORT_KEY) ?? "").split(":");
+        return { vid: parseInt(vid, 16), pid: parseInt(pid, 16) };
+      } catch {
+        return {};
+      }
+    }
+
+    async function authorisedPort(preferred = {}) {
+      if (!("serial" in navigator)) return null;
+      let ports;
+      try {
+        ports = await navigator.serial.getPorts();
+      } catch {
+        return null;
+      }
+      if (ports.length === 0) return null;
+      if (ports.length === 1) return ports[0];
+
+      const want = Number.isInteger(preferred.vid) ? preferred : rememberedIds();
+      if (!Number.isInteger(want.vid)) return null;      // several boards, no hint: let the user choose
+      const matches = ports.filter((port) => {
+        const info = port.getInfo();
+        return info.usbVendorId === want.vid && info.usbProductId === want.pid;
+      });
+      return matches.length === 1 ? matches[0] : null;
+    }
+
+    async function autoConnect() {
+      const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+      const port = await authorisedPort({
+        vid: parseInt(params.get("vid") ?? "", 16),
+        pid: parseInt(params.get("pid") ?? "", 16),
+      });
+      if (!port) return;                                  // nothing authorised yet: the button asks
+      await connect(port);
+    }
+
+    // ---- connection ----
+    function setConnected(connected) {
+      ui.badgeConn.className = connected ? "badge text-bg-success" : "badge text-bg-secondary";
+      ui.badgeConn.textContent = connected ? "Connected" : "Disconnected";
+      ui.btnConnect.disabled = connected;
+      ui.btnStream.disabled = !connected;
+      ui.btnDisconnect.disabled = !connected;
+      ui.slaveAddr.disabled = connected;
+      ui.btnRegRead.disabled = !connected;
+      ui.btnRegWrite.disabled = !connected;
+      if (!connected) {
+        for (const el of [ui.valX, ui.valY, ui.valZ, ui.heroMag]) {
+          el.textContent = "—";
+          el.classList.add("is-empty");
+        }
+        for (const bar of [ui.barX, ui.barY, ui.barZ]) bar.style.width = "0%";
+        ui.infoStatus.textContent = "—";
+        ui.infoTemp.textContent = "—";
+      }
+    }
+
+    async function connect(existingPort) {
+      if (!("serial" in navigator)) {
+        log("Web Serial is unavailable. Use Chrome, Edge or Opera over https:// or http://localhost.");
+        return;
+      }
+
+      try {
+        state.port = existingPort ?? await authorisedPort() ?? await navigator.serial.requestPort();
+        await state.port.open({ baudRate: 115200 });
+        state.writer = state.port.writable.getWriter();
+        state.reader = state.port.readable.getReader();
+        startReadLoop();
+        rememberPort(state.port);
+        setConnected(true);
+        log("Serial port open.");
+
+        await scpi(":I2C:INIT");
+        await scpi(":I2C:FREQuency 400k");
+        log("I2C ready at 400 kHz.");
+
+        // Leave whatever mode the part was left in; only then is it idle enough
+        // to answer a measurement command predictably.
+        const status = await command(CMD_EX);
+        log(`Exit mode acknowledged, status ${describeStatus(status)}.`);
+        state.scale = 1;
+      } catch (error) {
+        if (error && error.name === "NotFoundError") {
+          log("Port selection cancelled.");
+        } else {
+          log(`Connect failed: ${error.message}`);
+        }
+        await disconnect();
+      }
+    }
+
+    async function disconnect() {
+      stopStreaming();
+
+      // The read loop owns the lock and releases it; cancel only wakes the
+      // pending read, so wait for the loop before closing the port.
+      if (state.reader) { try { await state.reader.cancel(); } catch { /* gone */ } }
+      if (state.readLoop) { try { await state.readLoop; } catch { /* reported */ } state.readLoop = null; }
+      if (state.reader) { try { state.reader.releaseLock(); } catch { /* released */ } state.reader = null; }
+      if (state.writer) { try { state.writer.releaseLock(); } catch { /* released */ } state.writer = null; }
+      if (state.port) { try { await state.port.close(); } catch { /* closed */ } state.port = null; }
+
+      state.rxBuffer = "";
+      setConnected(false);
+    }
+
+    ui.btnConnect.addEventListener("click", () => connect());
+    ui.btnDisconnect.addEventListener("click", disconnect);
+    ui.btnStream.addEventListener("click", () => {
+      if (state.streaming) stopStreaming();
+      else startStreaming();
+    });
+
+    ui.btnRegRead.addEventListener("click", async () => {
+      const reg = parseInt(String(ui.regAddr.value).trim().replace(/^0x/i, ""), 16);
+      if (!Number.isInteger(reg) || reg < 0 || reg > 0x3F) {
+        log("Register must be between 0x00 and 0x3F.");
+        return;
+      }
+      try {
+        const value = await readRegister(reg);
+        ui.regValue.value = "0x" + value.toString(16).toUpperCase().padStart(4, "0");
+        log(`Register ${hex2(reg)} = ${ui.regValue.value}`);
+      } catch (error) {
+        log(`Register read failed: ${error.message}`);
+      }
+    });
+
+    ui.btnRegWrite.addEventListener("click", async () => {
+      const reg = parseInt(String(ui.regAddr.value).trim().replace(/^0x/i, ""), 16);
+      const value = parseInt(String(ui.regValue.value).trim().replace(/^0x/i, ""), 16);
+      if (!Number.isInteger(reg) || reg < 0 || reg > 0x3F || !Number.isInteger(value) || value < 0 || value > 0xFFFF) {
+        log("Register must be 0x00–0x3F and the value a 16-bit word.");
+        return;
+      }
+      try {
+        const status = await writeRegister(reg, value);
+        log(`Wrote ${hex2(reg)} = 0x${value.toString(16).toUpperCase().padStart(4, "0")}, status ${describeStatus(status)}`);
+      } catch (error) {
+        log(`Register write failed: ${error.message}`);
+      }
+    });
+
+    window.addEventListener("beforeunload", () => { disconnect(); });
+
+    applyAddress(initialAddress(), { persist: false });
+    setConnected(false);
+    autoConnect();
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("../service-worker.js").catch(() => {
+          /* Offline support is optional; the page works without it. */
+        });
+      });
+    }
+  })();
+  </script>
+</body>
+</html>
