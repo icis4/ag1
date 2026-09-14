@@ -532,10 +532,19 @@
       autoScale: els("autoScale"), rangeMin: els("rangeMin"), rangeMax: els("rangeMax"),
     };
 
+    /* The first frames after power-on carry a thermal transient, and the first has
+     * no predecessor for the temporal filter, so Melexis advises skipping frame 1
+     * and reading the 4th and 5th (MLX90641 start-up behaviour, AN rev 001). The
+     * page cannot tell a freshly powered sensor from a warm one, so it drops three
+     * frames after every connect — a second at 32 Hz, imperceptible, and it keeps
+     * a cold start from being read as a calibration fault. */
+    const WARMUP_FRAMES = 3;
+
     const state = {
       port: null, writer: null, reader: null, readLoop: null,
       rxBuffer: "", waiters: [],
       streaming: false, params: null, refreshMs: 500,
+      warmupFrames: 0,
       frame: new Uint16Array(242),
       image: new Float32Array(PIXELS),
       lastFrameAt: 0,
@@ -722,6 +731,13 @@
       while (state.streaming) {
         try {
           const frame = await readFrame();
+
+          if (state.warmupFrames > 0) {
+            state.warmupFrames -= 1;
+            ui.empty.textContent = `Warming up — discarding the first ${WARMUP_FRAMES} frames.`;
+            continue;
+          }
+
           const { ta, vdd, subPage } = calculateTo(frame, state.params, emissivity(), Number(ui.tr.value), state.image);
           ui.infoSub.textContent = String(subPage);
           correctBadPixel(state.params.brokenPixel, state.image);
@@ -801,7 +817,8 @@
         if (state.params.emissivityEE > 0.1 && state.params.emissivityEE <= 1) {
           ui.emissivity.value = state.params.emissivityEE.toFixed(2);
         }
-        log("Calibration ready.");
+        state.warmupFrames = WARMUP_FRAMES;
+        log(`Calibration ready. The first ${WARMUP_FRAMES} frames will be discarded.`);
       } catch (error) {
         if (error && error.name === "NotFoundError") {
           log("Port selection cancelled.");
