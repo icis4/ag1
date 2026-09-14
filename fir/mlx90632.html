@@ -156,6 +156,14 @@
               <dt>Measurement</dt><dd id="infoMeas">—</dd>
               <dt>Sample</dt><dd id="infoSample">—</dd>
             </dl>
+
+            <label class="form-label mt-3" for="slaveAddr" style="font-size:.75rem">I2C address</label>
+            <input id="slaveAddr" class="form-control form-control-sm" type="text"
+                   spellcheck="false" autocomplete="off" value="0x3A">
+            <div class="form-text" style="font-size:.6875rem">
+              7-bit, 0x08 to 0x77. Detect passes the address it found; the last one used here is
+              remembered. Applies on the next connect.
+            </div>
           </div>
         </div>
 
@@ -213,7 +221,7 @@
      * reference port of the mlx90632_depends.h layer.
      * ------------------------------------------------------------------ */
 
-    const SLAVE = 0x3A;
+    const DEFAULT_SLAVE = 0x3A;
 
     /* Addresses index 16-bit REGISTERS here, one per address — a 32-bit
      * constant occupies two consecutive addresses. (The array sensors are byte
@@ -314,7 +322,7 @@
     const els = id => document.getElementById(id);
     const ui = {
       btnConnect: els("btnConnect"), btnStream: els("btnStream"), btnDisconnect: els("btnDisconnect"),
-      badgeConn: els("badgeConn"), log: els("log"),
+      badgeConn: els("badgeConn"), log: els("log"), slaveAddr: els("slaveAddr"),
       heroValue: els("heroValue"), heroAmbient: els("heroAmbient"),
       canvas: els("trend"), chartEmpty: els("chartEmpty"), tooltip: els("tooltip"),
       chartSpan: els("chartSpan"), readingsBody: els("readingsBody"),
@@ -326,6 +334,7 @@
     const state = {
       port: null, writer: null, reader: null, readLoop: null,
       rxBuffer: "", waiters: [],
+      slave: DEFAULT_SLAVE,
       streaming: false, cal: null, refreshMs: 500,
       samples: [],          // { t, object, ambient }
       hoverIndex: -1,
@@ -390,7 +399,7 @@
     const hex = n => "0x" + n.toString(16).toUpperCase();
 
     async function readRegs(address, count) {
-      const payload = await scpi(`:I2C:MemReaD ${hex(SLAVE)},${hex(address)},2,${count * 2}`);
+      const payload = await scpi(`:I2C:MemReaD ${hex(state.slave)},${hex(address)},2,${count * 2}`);
       const bytes = payload.split(",");
       if (bytes.length < count * 2) {
         throw new Error(`Short read at ${hex(address)}: ${bytes.length} of ${count * 2} bytes`);
@@ -414,7 +423,7 @@
     }
 
     async function writeReg(address, value) {
-      await scpi(`:I2C:MemWRite ${hex(SLAVE)},${hex(address)},2,${hex((value >> 8) & 0xFF)},${hex(value & 0xFF)}`);
+      await scpi(`:I2C:MemWRite ${hex(state.slave)},${hex(address)},2,${hex((value >> 8) & 0xFF)},${hex(value & 0xFF)}`);
     }
 
     const RATE_HZ = ["0.5 Hz", "1 Hz", "2 Hz", "4 Hz", "8 Hz", "16 Hz", "32 Hz", "64 Hz"];
@@ -486,7 +495,7 @@
       await writeReg(ADDR.status, before & ~STAT_DATA_RDY);
 
       const waitMs = Math.max(500, state.refreshMs * 3);
-      await scpi(`:I2C:WaitMask ${hex(SLAVE)},${hex(ADDR.status)},${hex(STAT_DATA_RDY)},${waitMs},2000`,
+      await scpi(`:I2C:WaitMask ${hex(state.slave)},${hex(ADDR.status)},${hex(STAT_DATA_RDY)},${waitMs},2000`,
                  waitMs + 1500);
 
       const status = await readReg(ADDR.status);
@@ -709,6 +718,7 @@
       ui.btnConnect.disabled = connected;
       ui.btnStream.disabled = !connected;
       ui.btnDisconnect.disabled = !connected;
+      ui.slaveAddr.disabled = connected;
       if (!connected) {
         ui.heroValue.classList.add("is-empty");
         ui.heroValue.textContent = "—";
@@ -719,14 +729,94 @@
       }
     }
 
-    async function connect() {
+    /* The address is not fixed: the Detect page links here with #addr=0x…, and a
+     * part can be re-addressed in its own memory. A hash carries it rather than a
+     * query string, so the service worker still matches the cached page offline.
+     * localStorage throws when site data is blocked, so every use is guarded. */
+    const STORAGE_KEY = "melexisio.mlx90632.addr";
+
+    function validAddress(value) {
+      const parsed = parseInt(String(value).trim().replace(/^0x/i, ""), 16);
+      return Number.isInteger(parsed) && parsed >= 0x08 && parsed <= 0x77 ? parsed : null;
+    }
+
+    function initialAddress() {
+      const fromHash = /(?:^|[#&])addr=(?:0x)?([0-9a-f]{1,2})/i.exec(location.hash);
+      if (fromHash) {
+        const parsed = validAddress(fromHash[1]);
+        if (parsed !== null) return parsed;
+      }
+      try {
+        const saved = validAddress(localStorage.getItem(STORAGE_KEY));
+        if (saved !== null) return saved;
+      } catch { /* storage unavailable */ }
+      return DEFAULT_SLAVE;
+    }
+
+    function applyAddress(addr, { persist = true } = {}) {
+      state.slave = addr;
+      ui.slaveAddr.value = hex(addr);
+      if (!persist) return;
+      try { localStorage.setItem(STORAGE_KEY, hex(addr)); } catch { /* storage unavailable */ }
+    }
+
+    ui.slaveAddr.addEventListener("change", () => {
+      const parsed = validAddress(ui.slaveAddr.value);
+      if (parsed === null) {
+        ui.slaveAddr.value = hex(state.slave);
+        log("Address must be 7-bit hex between 0x08 and 0x77.");
+        return;
+      }
+      applyAddress(parsed);
+      log(`Using I2C address ${hex(parsed)} on the next connect.`);
+    });
+
+    /* Web Serial grants permission per origin, so a port the user picked on the
+     * Detect page is already ours: getPorts() returns it without a picker. The
+     * Open link says which board it was (#vid/#pid) and asks for the connection
+     * with connect=1, so only that flow auto-connects — a page opened directly
+     * still waits for the button. A port can be open in one page at a time, so
+     * Detect closes its own before navigating. */
+    async function autoConnect() {
+      const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+      if (params.get("connect") !== "1" || !("serial" in navigator)) return;
+
+      const vid = parseInt(params.get("vid") ?? "", 16);
+      const pid = parseInt(params.get("pid") ?? "", 16);
+
+      let ports;
+      try {
+        ports = await navigator.serial.getPorts();
+      } catch {
+        return;
+      }
+
+      const matches = Number.isInteger(vid) && Number.isInteger(pid)
+        ? ports.filter((port) => {
+            const info = port.getInfo();
+            return info.usbVendorId === vid && info.usbProductId === pid;
+          })
+        : ports;
+
+      if (matches.length !== 1) {
+        log(matches.length === 0
+          ? "No board is authorised for this page yet; press Connect."
+          : `${matches.length} authorised boards; press Connect to choose one.`);
+        return;
+      }
+
+      log("Reusing the board authorised on the Detect page.");
+      await connect(matches[0]);
+    }
+
+    async function connect(existingPort) {
       if (!("serial" in navigator)) {
         log("Web Serial is unavailable. Use Chrome, Edge or Opera over https:// or http://localhost.");
         return;
       }
 
       try {
-        state.port = await navigator.serial.requestPort();
+        state.port = existingPort ?? await navigator.serial.requestPort();
         await state.port.open({ baudRate: 115200 });
         state.writer = state.port.writable.getWriter();
         state.reader = state.port.readable.getReader();
@@ -739,7 +829,7 @@
         log("I2C ready at 400 kHz.");
 
         state.cal = await initSensor();
-        log(`Calibration read; sensor ready at ${hex(SLAVE)}.`);
+        log(`Calibration read; sensor ready at ${hex(state.slave)}.`);
       } catch (error) {
         if (error && error.name === "NotFoundError") {
           log("Port selection cancelled.");
@@ -767,7 +857,7 @@
       setConnected(false);
     }
 
-    ui.btnConnect.addEventListener("click", connect);
+    ui.btnConnect.addEventListener("click", () => connect());
     ui.btnDisconnect.addEventListener("click", async () => { await disconnect(); log("Disconnected."); });
     ui.btnStream.addEventListener("click", () => { state.streaming ? stopStreaming() : startStreaming(); });
 
@@ -781,7 +871,9 @@
       });
     }
 
+    applyAddress(initialAddress(), { persist: false });
     setConnected(false);
+    autoConnect();
     drawChart();
     log("Ready. Connect the Melexis IO board, then press Start.");
   })();

@@ -192,14 +192,13 @@
      * all four signatures rather than only the default one.
      * ------------------------------------------------------------------ */
 
-    /* Each sensor page has one slave address compiled into it, so a chip found
-     * somewhere else still gets a link, with a warning that the page will look
-     * for it at its default address instead. */
+    /* The sensor pages take the address from #addr=0x…, so a re-addressed part
+     * opens correctly instead of sending the page to its compiled-in default. */
     const PAGES = {
-      MLX90632: { file: "mlx90632.html", addr: 0x3A },
-      MLX90640: { file: "mlx90640.html", addr: 0x33 },
-      MLX90641: { file: "mlx90641.html", addr: 0x33 },
-      MLX90642: { file: "mlx90642.html", addr: 0x66 },
+      MLX90632: "mlx90632.html",
+      MLX90640: "mlx90640.html",
+      MLX90641: "mlx90641.html",
+      MLX90642: "mlx90642.html",
     };
 
     const FIRST_ADDR = 0x08, LAST_ADDR = 0x77;
@@ -408,6 +407,17 @@
       ui.infoFirmware.title = line;
     }
 
+    /* What the chip pages need to take over: which address answered, which board
+     * to reuse, and permission to connect without another click. */
+    function openParams(addr) {
+      const params = [`addr=${hex2(addr)}`, "connect=1"];
+      const info = state.port ? state.port.getInfo() : null;
+      if (info && Number.isInteger(info.usbVendorId) && Number.isInteger(info.usbProductId)) {
+        params.push(`vid=${info.usbVendorId.toString(16)}`, `pid=${info.usbProductId.toString(16)}`);
+      }
+      return params.join("&");
+    }
+
     // ---- bus map ----
     function buildBusMap() {
       ui.busMap.replaceChildren();
@@ -459,19 +469,21 @@
       if (page) {
         const link = document.createElement("a");
         link.className = "btn btn-sm btn-outline-primary";
-        link.href = page.file;
+        link.href = `${page}#${openParams(addr)}`;
+        link.title = `Open the ${result.chip} page at ${hex2(addr)}`;
         link.textContent = "Open";
-        if (addr !== page.addr) {
-          link.classList.replace("btn-outline-primary", "btn-outline-warning");
-          link.title = `This chip answered at ${hex2(addr)}, but the page talks to ${hex2(page.addr)}.`;
-          const warn = document.createElement("div");
-          warn.className = "text-warning";
-          warn.style.fontSize = ".6875rem";
-          warn.textContent = `page uses ${hex2(page.addr)}`;
-          cOpen.append(link, warn);
-        } else {
-          cOpen.append(link);
-        }
+
+        /* A serial port is open in one page at a time, so this page has to let go
+         * before the next one can take it. Modified clicks open a new tab, where
+         * this page keeps the port and the handover cannot happen. */
+        link.addEventListener("click", async (event) => {
+          if (!state.port || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          const href = link.href;
+          await disconnect();
+          location.href = href;
+        });
+        cOpen.append(link);
       }
 
       row.append(cAddr, cChip, cWhy, cOpen);
