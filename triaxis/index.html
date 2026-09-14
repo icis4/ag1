@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Triaxis tools — read Melexis magnetic position sensors over I2C through the Melexis IO board.">
+  <meta name="description" content="Triaxis tools — read Melexis magnetic position sensors over SPI through the Melexis IO board.">
   <title>Triaxis Sensors</title>
   <meta name="theme-color" content="#0b0e17">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
@@ -240,7 +240,7 @@
       </svg>
       <h1>Triaxis Sensors</h1>
     </div>
-    <p class="tagline">Melexis magnetic position sensors over I2C.</p>
+    <p class="tagline">Melexis magnetic position sensors over SPI.</p>
 
     <div class="tools">
       <a class="tool" href="mlx90396.html">
@@ -260,8 +260,8 @@
     </div>
 
     <p class="note">
-      Read through the Melexis IO board over I2C, so connect that first. The Triaxis parts answer
-      on 0x0C to 0x0F, chosen by the A0 and A1 pins.
+      Read through the Melexis IO board over SPI, so connect that first. The MS_A0_A1 pin decides
+      the bus: below an eighth of the supply the part is an SPI slave, above it an I2C one.
     </p>
   </main>
 

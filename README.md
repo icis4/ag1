@@ -92,13 +92,17 @@ four, and the traps in porting their calibration maths, are in
 
 ## Triaxis
 
-`triaxis/mlx90396.html` reads the three field components and the temperature from an MLX90396
-over I2C. Melexis publishes datasheets for the MLX90391 to MLX90395 and the MLX90397, but not
-for the 90396, so the page implements the documented family protocol — a command written to
-register 0x80, the reply read back after a repeated start, register access word-wise with the
-I2C byte address being the register shifted left by one. The readings are raw LSB counts, since
-converting to microtesla needs the gain and resolution settings. The page says so in place, and
-carries a register panel for checking anything the protocol assumption gets wrong.
+`triaxis/mlx90396.html` reads the four magnetic pixels, the differential channels, the supply
+and the temperature from an MLX90396 over **SPI** — the MS_A0_A1 pin below an eighth of the
+supply straps the part as an SPI slave. Each command is one CS-low full-duplex transfer with a
+CRC-8, and at most six magnetic channels come back per measurement.
+
+It is built from the preliminary datasheet V0.5 and from a colleague's working implementation,
+which disagree in three places: temperature leads the channel words rather than trailing them,
+measurement words are 12-bit rather than 16, and the temperature bit of the read command is
+0x41 rather than the 0x48 the datasheet's table implies. The page follows the working code and
+offers the datasheet's variant as a switch. Readings stay in raw LSB, since microtesla needs
+the configured range.
 
 ## Running locally
 

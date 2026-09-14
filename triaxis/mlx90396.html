@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="MLX90396 Triaxis magnetometer readout — three-axis magnetic field over I2C through the Melexis IO board.">
+  <meta name="description" content="MLX90396 Triaxis magnetometer readout — magnetic field from four pixels over SPI through the Melexis IO board.">
   <title>MLX90396</title>
   <meta name="theme-color" content="#0b0e17">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
@@ -112,11 +112,12 @@
     </div>
 
     <div class="note-card">
-      Built from <strong>MLX90396 preliminary datasheet V0.5</strong> (8 June 2026). Preliminary
-      means the register map and the command encoding can still move. Two things the page cannot
-      know about your part: whether CRC-8 protection is enabled in its NVRAM (the toggle is
-      below), and the microtesla per LSB, which depends on the configured range — readings are
-      raw LSB counts.
+      Driven over <strong>SPI</strong>, which is how the part is strapped here: the MS_A0_A1 pin
+      below ⅛ VDD selects SPI rather than I2C. Built from the preliminary datasheet V0.5 and from
+      a working reference implementation, which disagree in three places — the temperature word
+      comes first in a measurement reply, values are 12-bit, and the temperature bit of the read
+      command is 0x41 rather than the 0x48 the datasheet's table implies. The last one is a
+      switch below. Readings are raw LSB: microtesla needs the configured range.
     </div>
 
     <div class="row g-3">
@@ -174,12 +175,14 @@
               <dt>Sample</dt><dd id="infoSample">—</dd>
             </dl>
 
-            <label class="form-label mt-3" for="slaveAddr" style="font-size:.75rem">I2C address</label>
-            <input id="slaveAddr" class="form-control form-control-sm" type="text"
-                   spellcheck="false" autocomplete="off" value="0x0C">
+            <label class="form-label mt-3" for="vddRail" style="font-size:.75rem">Supply</label>
+            <select id="vddRail" class="form-select form-select-sm">
+              <option value=":VDD:3V3" selected>3.3 V</option>
+              <option value=":VDD:5V">5 V (USB Vbus)</option>
+              <option value=":VDD:OFF">Off</option>
+            </select>
             <div class="form-text" style="font-size:.6875rem">
-              The family answers on 0x0C to 0x0F, set by the A0 and A1 pins. Detect passes the
-              address it found; the last one used here is remembered. Applies on the next connect.
+              The board powers the part. Applies on the next connect.
             </div>
           </div>
         </div>
@@ -207,6 +210,16 @@
               NV_COMM_CRC decides this, and it cannot be read without talking to the part first.
               If every command comes back rejected, try the other setting.
             </div>
+
+            <label class="form-label mt-3" for="tempBit" style="font-size:.75rem">RM temperature bit</label>
+            <select id="tempBit" class="form-select form-select-sm">
+              <option value="1" selected>0x41 — reference implementation</option>
+              <option value="8">0x48 — datasheet table</option>
+            </select>
+            <div class="form-text" style="font-size:.6875rem">
+              The two sources disagree. If temperature reads as nonsense, or the whole reply looks
+              shifted, try the other one.
+            </div>
           </div>
         </div>
 
@@ -226,24 +239,28 @@
 
     /* Protocol from the MLX90396 preliminary datasheet V0.5.
      *
-     * A command is written to register 0x80 and the reply read back after a
-     * repeated start, which is what :I2C:EXCHange does — read count first, then
-     * the bytes to write. Commands carry a channel bitmap across three bytes and
-     * an optional CRC-8 byte:
+     * The part is strapped for SPI here (MS_A0_A1 below ⅛ VDD), so a command is
+     * one CS-low full-duplex transfer: the command bytes, then as many padding
+     * zeros as there are reply bytes to clock out. Commands carry a channel
+     * bitmap across three bytes and an optional CRC-8 byte:
      *   SM   0b0011 X0 Y0 Z0 X1 | Y1 Z1 X2 Y2 Z2 X3 Y3 Z3 | X02 Y02 Z02 X13 Y13 Z13 VDD d | CRC
      *   RM   0b0100 T000 | CRC            EX  0b1000 <target mode> | CRC
      *   RR   0b0101 dddd | REG | CRC      WR  0b0110 dddd | REG | DATA hi | DATA lo | CRC
      * At most six magnetic measurements can be read in one go.
      *
-     * The CRC-8 is poly 0x2F, init 0xFF, final XOR 0xFF, taken over the whole
-     * message including the I2C address byte with its R/W bit. Both worked
-     * examples in the datasheet (0x82 for a reset in I2C, 0x65 in SPI) come out
-     * of exactly those parameters — its numbered steps describe the AAA variant,
-     * which uses init and XOR of 0x00 instead and yields 0x14 for the same frame.
+     * The CRC-8 is poly 0x2F, init 0xFF, final XOR 0xFF, over the command bytes.
+     * Both worked examples in the datasheet (0x65 for a reset in SPI, 0x82 for
+     * the I2C form where the address byte joins the message) come out of exactly
+     * those parameters; its numbered steps describe the AAA variant, which uses
+     * 0x00 for both and yields 0x14 for the same frame.
+     *
+     * Three details come from a working reference implementation rather than the
+     * datasheet, which disagrees: temperature leads the channel words in a
+     * measurement reply, the words are 12-bit, and the temperature bit of RM is
+     * 0x41 rather than 0x48. The last is a switch in the UI.
      */
 
-    const DEFAULT_SLAVE = 0x12;              // NV_COMM_I2C_ADDR default
-    const CMD_REG = 0x80;
+    const SPI = ":SPI";                      // CS0 is A2 on the connector
     const CMD_SM = 0x30, CMD_RM = 0x40, CMD_RR = 0x50, CMD_WR = 0x60;
     const CMD_EX = 0x80, CMD_RT = 0xF0;
     const EX_READY = 0x00;
@@ -278,7 +295,8 @@
     const els = id => document.getElementById(id);
     const ui = {
       btnConnect: els("btnConnect"), btnStream: els("btnStream"), btnDisconnect: els("btnDisconnect"),
-      badgeConn: els("badgeConn"), log: els("log"), slaveAddr: els("slaveAddr"),
+      badgeConn: els("badgeConn"), log: els("log"),
+      vddRail: els("vddRail"), tempBit: els("tempBit"),
       heroMag: els("heroMag"), readings: els("readings"),
       channels: els("channels"), channelCount: els("channelCount"), useCrc: els("useCrc"),
       infoStatus: els("infoStatus"), infoTemp: els("infoTemp"), infoSample: els("infoSample"),
@@ -289,7 +307,6 @@
     const state = {
       port: null, writer: null, reader: null, readLoop: null,
       rxBuffer: "", waiters: [],
-      slave: DEFAULT_SLAVE,
       streaming: false, scale: 1, lastSampleAt: 0,
       selected: new Set(["X0", "Y0", "Z0"]),
       rows: new Map(),
@@ -348,42 +365,61 @@
 
     const hex = n => "0x" + n.toString(16).toUpperCase();
     const hex2 = n => "0x" + n.toString(16).toUpperCase().padStart(2, "0");
-    const s16 = v => (v > 32767 ? v - 65536 : v);
+    /* Measurement words are 12-bit, left-aligned in the low twelve bits: sign
+     * bit 11, not 15. Reading them as int16 gives values sixteen times too large
+     * and the wrong sign near full scale. */
+    const s12 = v => ((v << 4) & 0x8000 ? ((v << 4) & 0xFFFF) - 0x10000 : (v << 4) & 0xFFFF) >> 4;
 
     // ---- chip ----
-    function crc8(bytes) {
-      let crc = 0xFF;                                   // init; AAA parts use 0x00
+    function crc8(bytes, init = 0xFF, xorout = 0xFF) {
+      let crc = init;
       for (const byte of bytes) {
         crc ^= byte;
         for (let i = 0; i < 8; i++) {
           crc = (crc & 0x80) ? ((crc << 1) ^ 0x2F) & 0xFF : (crc << 1) & 0xFF;
         }
       }
-      return crc ^ 0xFF;                                // final XOR; 0x00 on AAA parts
+      return crc ^ xorout;
     }
 
-    /* The CRC covers the address byte as it appears on the wire, so the write
-     * phase and the read phase are two different messages with two CRCs. */
-    const writeCrc = (bytes) => crc8([state.slave << 1, ...bytes]);
-
+    /* One command is one CS-low window. MISO is clocked out by sending padding
+     * zeros, so reading n bytes means appending n zeros and taking the last n of
+     * the full-duplex reply. Over SPI the CRC covers the command bytes only —
+     * unlike I2C, where the address byte is part of the message.
+     *
+     * :SPI:0:WriteReaD would drive CS0 on its own, but the reference
+     * implementation toggles CS by hand and that is the path with hardware
+     * behind it, so this follows it. */
     async function exchange(readCount, writeBytes) {
       const payload = ui.useCrc.checked
-        ? [...writeBytes, writeCrc(writeBytes)]
+        ? [...writeBytes, crc8(writeBytes)]
         : writeBytes;
       const want = readCount + (ui.useCrc.checked ? 1 : 0);
-      const reply = await scpi(
-        `:I2C:EXCHange ${hex(state.slave)},${want},${payload.map(hex).join(",")}`);
-      const bytes = reply.split(",").filter(b => b.trim()).map(b => parseInt(b, 16));
-      if (bytes.length < want) throw new Error(`short reply: ${bytes.length} of ${want} bytes`);
+      const tx = [...payload, ...new Array(want).fill(0)];
 
-      if (ui.useCrc.checked) {
-        const expected = crc8([(state.slave << 1) | 1, ...bytes.slice(0, readCount)]);
-        const received = bytes[readCount];
-        if (expected !== received) {
-          log(`CRC mismatch: expected ${hex2(expected)}, got ${hex2(received)}`);
-        }
+      await scpi(`${SPI}:CS0 0`);
+      let reply;
+      try {
+        reply = await scpi(`${SPI}:WriteReaD ${tx.map(hex).join(",")}`);
+      } finally {
+        await scpi(`${SPI}:CS0 1`);
+      }
+
+      const all = (reply.match(/[0-9a-fA-F]+/g) ?? []).map(token => parseInt(token, 16));
+      if (all.length < tx.length) throw new Error(`short reply: ${all.length} of ${tx.length} bytes`);
+      const bytes = all.slice(payload.length, payload.length + want);
+
+      if (ui.useCrc.checked && !crcMatches(bytes.slice(0, readCount), bytes[readCount])) {
+        log(`CRC mismatch on a ${readCount}-byte reply (got ${hex2(bytes[readCount])})`);
       }
       return bytes.slice(0, readCount);
+    }
+
+    /* Standard parts use init and final XOR of 0xFF, AAA parts 0x00, and which
+     * one is in hand is not knowable from here — so accept either, as the
+     * reference implementation does. */
+    function crcMatches(message, received) {
+      return crc8(message) === received || crc8(message, 0x00, 0x00) === received;
     }
 
     const describeStatus = (s) => {
@@ -407,7 +443,7 @@
     }
 
     async function command(first, rest = []) {
-      const [status] = await exchange(1, [CMD_REG, first, ...rest]);
+      const [status] = await exchange(1, [first, ...rest]);
       ui.infoStatus.textContent = describeStatus(status);
       return status;
     }
@@ -422,7 +458,8 @@
     async function readMeasurement() {
       const channels = selectedChannels();
       const words = channels.length + (state.temperature ? 1 : 0);
-      const bytes = await exchange(1 + words * 2, [CMD_REG, CMD_RM | (state.temperature ? 0x08 : 0)]);
+      const tempBit = state.temperature ? Number(ui.tempBit.value) : 0;
+      const bytes = await exchange(1 + words * 2, [CMD_RM | tempBit]);
 
       const status = bytes[0];
       ui.infoStatus.textContent = describeStatus(status);
@@ -430,22 +467,24 @@
       const values = new Map();
       let at = 1;
       const next = () => {
-        const value = s16((bytes[at] << 8) | bytes[at + 1]);
+        const value = s12((bytes[at] << 8) | bytes[at + 1]);
         at += 2;
         return value;
       };
+      // Temperature leads the channel words, not trails them.
+      const temperature = state.temperature ? next() : null;
       for (const channel of channels) values.set(channel.key, next());
-      return { status, values, temperature: state.temperature ? next() : null };
+      return { status, values, temperature };
     }
 
     async function readRegister(reg) {
-      const bytes = await exchange(3, [CMD_REG, CMD_RR, reg]);
+      const bytes = await exchange(3, [CMD_RR, reg]);
       ui.infoStatus.textContent = describeStatus(bytes[0]);
       return (bytes[1] << 8) | bytes[2];
     }
 
     async function writeRegister(reg, value) {
-      const [status] = await exchange(1, [CMD_REG, CMD_WR, reg, (value >> 8) & 0xFF, value & 0xFF]);
+      const [status] = await exchange(1, [CMD_WR, reg, (value >> 8) & 0xFF, value & 0xFF]);
       ui.infoStatus.textContent = describeStatus(status);
       return status;
     }
@@ -551,7 +590,7 @@
       await startMeasurement();
       const deadline = Date.now() + 500;
       while (Date.now() < deadline) {
-        const [status] = await exchange(1, [CMD_REG, CMD_RM]);
+        const [status] = await exchange(1, [CMD_RM]);
         if (status & STAT_DRDY) break;
         await new Promise(resolve => setTimeout(resolve, 2));
       }
@@ -589,48 +628,6 @@
       ui.infoSample.textContent = "—";
     }
 
-
-    /* The address is not fixed: the Detect page links here with #addr=0x…, and the
-     * A0/A1 pins move the part within 0x0C–0x0F. A hash carries it rather than a
-     * query string, so the service worker still matches the cached page offline.
-     * localStorage throws when site data is blocked, so every use is guarded. */
-    const STORAGE_KEY = "melexisio.mlx90396.addr";
-
-    function validAddress(value) {
-      const parsed = parseInt(String(value).trim().replace(/^0x/i, ""), 16);
-      return Number.isInteger(parsed) && parsed >= 0x08 && parsed <= 0x77 ? parsed : null;
-    }
-
-    function initialAddress() {
-      const fromHash = /(?:^|[#&])addr=(?:0x)?([0-9a-f]{1,2})/i.exec(location.hash);
-      if (fromHash) {
-        const parsed = validAddress(fromHash[1]);
-        if (parsed !== null) return parsed;
-      }
-      try {
-        const saved = validAddress(localStorage.getItem(STORAGE_KEY));
-        if (saved !== null) return saved;
-      } catch { /* storage unavailable */ }
-      return DEFAULT_SLAVE;
-    }
-
-    function applyAddress(addr, { persist = true } = {}) {
-      state.slave = addr;
-      ui.slaveAddr.value = hex(addr);
-      if (!persist) return;
-      try { localStorage.setItem(STORAGE_KEY, hex(addr)); } catch { /* storage unavailable */ }
-    }
-
-    ui.slaveAddr.addEventListener("change", () => {
-      const parsed = validAddress(ui.slaveAddr.value);
-      if (parsed === null) {
-        ui.slaveAddr.value = hex(state.slave);
-        log("Address must be 7-bit hex between 0x08 and 0x77.");
-        return;
-      }
-      applyAddress(parsed);
-      log(`Using I2C address ${hex(parsed)} on the next connect.`);
-    });
 
     /* Once a board has been authorised for this origin, getPorts() hands it back
      * without a dialog — the picker is only for granting permission in the first
@@ -691,7 +688,7 @@
       ui.btnConnect.disabled = connected;
       ui.btnStream.disabled = !connected;
       ui.btnDisconnect.disabled = !connected;
-      ui.slaveAddr.disabled = connected;
+      ui.vddRail.disabled = connected;
       ui.btnRegRead.disabled = !connected;
       ui.btnRegWrite.disabled = !connected;
       if (!connected) {
@@ -723,9 +720,17 @@
         setConnected(true);
         log("Serial port open.");
 
-        await scpi(":I2C:INIT");
-        await scpi(":I2C:FREQuency 400k");
-        log("I2C ready at 400 kHz.");
+        /* Order from the reference implementation: peripheral, the second chip
+         * select parked as an output, the connector buffers, then power. Mode 3
+         * (CPOL 1, CPHA 1) is what the part specifies. */
+        await scpi(`${SPI}:Init 0`);
+        await scpi(":CON:CS1:GPIO:INIT:OUT 0");
+        await scpi(`${SPI}:BUFfer 1,1,1,1,0`);
+        await scpi(`${SPI}:CPOL 1`);
+        await scpi(`${SPI}:CPHA 1`);
+        await scpi(`${SPI}:CS0 1`);
+        await scpi(ui.vddRail.value);
+        log(`SPI ready, mode 3, supply ${ui.vddRail.options[ui.vddRail.selectedIndex].text}.`);
 
         // Leave whatever mode the part was left in; only then is it idle enough
         // to answer a measurement command predictably.
@@ -798,7 +803,6 @@
 
     buildChannelPickers();
     buildReadings();
-    applyAddress(initialAddress(), { persist: false });
     setConnected(false);
     autoConnect();
 
