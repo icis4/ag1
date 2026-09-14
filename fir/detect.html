@@ -67,6 +67,7 @@
     .results td.addr { font-family: 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; }
     .results td.chip { font-weight: 600; white-space: nowrap; }
     .results td.evidence { color: var(--clr-text-muted); font-size: .75rem; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .results td.open { text-align: right; white-space: nowrap; }
     .results tr.is-unknown td.chip { color: var(--clr-text-muted); font-weight: 500; }
     .results-empty { color: var(--clr-text-dim); font-size: .8125rem; padding: 10px 0 2px; }
 
@@ -114,7 +115,7 @@
             <h2>Devices</h2>
             <table class="results">
               <thead>
-                <tr><th>Address</th><th>Identified as</th><th>Evidence</th></tr>
+                <tr><th>Address</th><th>Identified as</th><th>Evidence</th><th></th></tr>
               </thead>
               <tbody id="resultsBody"></tbody>
             </table>
@@ -190,6 +191,16 @@
      * slave address in memory), so every answering address is tested against
      * all four signatures rather than only the default one.
      * ------------------------------------------------------------------ */
+
+    /* Each sensor page has one slave address compiled into it, so a chip found
+     * somewhere else still gets a link, with a warning that the page will look
+     * for it at its default address instead. */
+    const PAGES = {
+      MLX90632: { file: "mlx90632.html", addr: 0x3A },
+      MLX90640: { file: "mlx90640.html", addr: 0x33 },
+      MLX90641: { file: "mlx90641.html", addr: 0x33 },
+      MLX90642: { file: "mlx90642.html", addr: 0x66 },
+    };
 
     const FIRST_ADDR = 0x08, LAST_ADDR = 0x77;
     const KNOWN_ADDRS = [0x33, 0x3A, 0x66];
@@ -442,7 +453,28 @@
       cWhy.className = "evidence";
       cWhy.textContent = result.evidence;
 
-      row.append(cAddr, cChip, cWhy);
+      const cOpen = document.createElement("td");
+      cOpen.className = "open";
+      const page = result.chip ? PAGES[result.chip] : null;
+      if (page) {
+        const link = document.createElement("a");
+        link.className = "btn btn-sm btn-outline-primary";
+        link.href = page.file;
+        link.textContent = "Open";
+        if (addr !== page.addr) {
+          link.classList.replace("btn-outline-primary", "btn-outline-warning");
+          link.title = `This chip answered at ${hex2(addr)}, but the page talks to ${hex2(page.addr)}.`;
+          const warn = document.createElement("div");
+          warn.className = "text-warning";
+          warn.style.fontSize = ".6875rem";
+          warn.textContent = `page uses ${hex2(page.addr)}`;
+          cOpen.append(link, warn);
+        } else {
+          cOpen.append(link);
+        }
+      }
+
+      row.append(cAddr, cChip, cWhy, cOpen);
       ui.resultsBody.append(row);
     }
 
