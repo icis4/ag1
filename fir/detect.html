@@ -169,7 +169,10 @@
       A scan writes nothing: each address gets a one-byte read, and an address that does not
       acknowledge is reported as empty. Identification then reads a register or two that the
       Melexis libraries themselves use to recognise a part, and the reasoning is shown beside
-      every result so a wrong guess is visible rather than silent.
+      every result so a wrong guess is visible rather than silent. Anything that answers is
+      listed whether or not it is one of these sensors — an unrecognised device still gets a row,
+      with the first bytes it returns. If nothing answers at the selected speed, the sweep runs
+      again at 100 kHz, since an SMBus part ignores a faster bus entirely.
     </p>
   </main>
 
@@ -397,7 +400,16 @@
         tried.push(`0x240B = 0x${word(version)}`);
       } catch { tried.push("0x240B unreadable"); }
 
-      return { chip: null, evidence: tried.join(" · ") };
+      /* Nothing matched, so this is some other device — still worth reporting
+       * with whatever it says when simply read, rather than a bare "unknown". */
+      let raw = "";
+      try {
+        const reply = await scpi(`:I2C:ReaD ${hex(addr)},4`, PROBE_TIMEOUT);
+        const bytes = reply.split(",").filter(b => b.trim()).slice(0, 4);
+        if (bytes.length) raw = `reads ${bytes.join(" ")} · `;
+      } catch { /* the plain read is a courtesy, not a requirement */ }
+
+      return { chip: null, evidence: raw + tried.join(" · ") };
     }
 
     /* *IDN? answers <manufacturer>,<model>,<serial>,<firmware>,<branch>/<build>,<date>
@@ -594,9 +606,31 @@
           update();
         }
 
+        /* An SMBus part is specified to 100 kHz and simply ignores a faster bus,
+         * so an empty sweep is not yet an empty bus. */
+        if (found === 0 && ui.busSpeed.value !== "100k") {
+          log("Nothing answered; retrying the sweep at 100 kHz in case something slow is out there.");
+          await scpi(":I2C:FREQuency 100k");
+          for (const addr of addresses) {
+            if (!state.scanning) break;
+            markCell(addr, "is-probing");
+            if (!await present(addr)) { markCell(addr, "is-empty"); continue; }
+            found += 1;
+            markCell(addr, "is-found");
+            log(`${hex2(addr)} acknowledged at 100 kHz; identifying…`);
+            const result = await identify(addr);
+            if (result.chip) named += 1;
+            addRow(addr, result);
+            update();
+          }
+          if (found > 0) log("Found only at 100 kHz — the part is slower than the selected speed.");
+        }
+
         if (found === 0) {
           ui.resultsEmpty.hidden = false;
-          ui.resultsEmpty.textContent = "No device acknowledged. Check wiring, pull-ups and power.";
+          ui.resultsEmpty.textContent =
+            "Nothing acknowledged, at the selected speed or at 100 kHz. That is a silent bus, "
+            + "not an unknown chip: check wiring, pull-ups and power.";
         }
         log(`Scan finished: ${found} device${found === 1 ? "" : "s"} answered, ${named} identified.`);
       } catch (error) {
