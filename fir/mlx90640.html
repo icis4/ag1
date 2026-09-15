@@ -137,6 +137,32 @@
               <dt>Frame</dt><dd id="infoFps">—</dd>
             </dl>
 
+            <label class="form-label mt-3" for="rateSelect" style="font-size:.75rem">Refresh rate</label>
+            <select id="rateSelect" class="form-select form-select-sm" disabled>
+              <option value="0">0.5 Hz</option>
+              <option value="1">1 Hz</option>
+              <option value="2">2 Hz</option>
+              <option value="3">4 Hz</option>
+              <option value="4">8 Hz</option>
+              <option value="5">16 Hz</option>
+            </select>
+            <div class="form-text" style="font-size:.6875rem">
+              Stops at 16 Hz on purpose: a frame is 1668 bytes of hex over USB CDC, and above
+              this the sensor starts overwriting what is still being read. Writes bits 9:7 of the
+              control register.
+            </div>
+
+            <label class="form-label mt-3" for="patternMode" style="font-size:.75rem">Reading pattern</label>
+            <select id="patternMode" class="form-select form-select-sm" disabled>
+              <option value="chess">Chess</option>
+              <option value="interleaved">Interleaved</option>
+            </select>
+            <div class="form-text" style="font-size:.6875rem">
+              The part is calibrated in chess mode, and Melexis recommends it: interleaved has
+              visibly worse fixed-pattern noise, which reads as a chequerboard. Writes bit 12 of
+              the control register straight away.
+            </div>
+
             <label class="form-label mt-3" for="slaveAddr" style="font-size:.75rem">I2C address</label>
             <input id="slaveAddr" class="form-control form-control-sm" type="text"
                    spellcheck="false" autocomplete="off" value="0x33">
@@ -240,6 +266,8 @@
     const EE_START = 0x2400, EE_WORDS = 832;
     const PIXEL_START = 0x0400, AUX_START = 0x0700, AUX_WORDS = 64;
     const STATUS_REG = 0x8000, CTRL_REG = 0x800D;
+    const CTRL_CHESS = 0x1000;          // bit 12: set is chess, clear is interleaved
+    const CTRL_RATE_MASK = 0x0380;      // bits 9:7
     const INIT_STATUS_VALUE = 0x0030;
     const SCALEALPHA = 0.000001;
 
@@ -579,6 +607,7 @@
       scaleBar: els("scaleBar"), scaleMin: els("scaleMin"), scaleMax: els("scaleMax"),
       statMin: els("statMin"), statMax: els("statMax"), statCentre: els("statCentre"),
       infoRate: els("infoRate"), infoRes: els("infoRes"), infoMode: els("infoMode"),
+      patternMode: els("patternMode"), rateSelect: els("rateSelect"),
       infoVdd: els("infoVdd"), infoTa: els("infoTa"), infoBad: els("infoBad"), infoFps: els("infoFps"),
       emissivity: els("emissivity"), tr: els("tr"),
       palette: els("palette"), smooth: els("smooth"),
@@ -680,8 +709,48 @@
       state.refreshMs = Math.max(20, Math.round(2000 / Math.pow(2, rate)));
       ui.infoRate.textContent = RATE_HZ[rate];
       ui.infoRes.textContent = `${16 + resolution} bit`;
-      ui.infoMode.textContent = (ctrl & 0x1000) ? "Chess" : "Interleaved";
+      /* The part may be running faster than this page offers; show that rather
+       * than snapping the control to a value the device is not at. */
+      if (rate > 5 && !ui.rateSelect.querySelector(`option[value="${rate}"]`)) {
+        const extra = document.createElement("option");
+        extra.value = String(rate);
+        extra.textContent = `${RATE_HZ[rate]} — above the cap`;
+        ui.rateSelect.append(extra);
+      }
+      ui.rateSelect.value = String(rate);
+
+      const chess = (ctrl & CTRL_CHESS) !== 0;
+      ui.infoMode.textContent = chess ? "Chess" : "Interleaved";
+      ui.patternMode.value = chess ? "chess" : "interleaved";
       return ctrl;
+    }
+
+    /* Changing the pattern changes which pixels belong to which subpage, so the
+     * half-picture already in the buffer was computed under the old rule and has
+     * to go, or the first frames after the switch show the two rules mixed. */
+    async function setPattern(chess) {
+      const ctrl = (await memRead(CTRL_REG, 1))[0];
+      const wanted = chess ? (ctrl | CTRL_CHESS) : (ctrl & ~CTRL_CHESS);
+      if (wanted !== ctrl) {
+        await memWrite(CTRL_REG, wanted);
+        log(`Control register ${hex(ctrl)} → ${hex(wanted)}: ${chess ? "chess" : "interleaved"} pattern.`);
+      }
+
+      state.image.fill(0);
+      state.seenSubpages.clear();
+      ui.empty.hidden = false;
+      ui.empty.textContent = "Waiting for both subpages…";
+      await readControl();
+    }
+
+    async function setRefreshRate(code) {
+      const ctrl = (await memRead(CTRL_REG, 1))[0];
+      const wanted = (ctrl & ~CTRL_RATE_MASK) | ((code & 0x07) << 7);
+      if (wanted !== ctrl) {
+        await memWrite(CTRL_REG, wanted);
+        log(`Control register ${hex(ctrl)} → ${hex(wanted)}: ${RATE_HZ[code]}.`);
+      }
+      await readControl();
     }
 
     async function readFrame() {
@@ -813,6 +882,8 @@
       ui.btnStream.disabled = !connected;
       ui.btnDisconnect.disabled = !connected;
       ui.slaveAddr.disabled = connected;
+      ui.patternMode.disabled = !connected;
+      ui.rateSelect.disabled = !connected;
       if (!connected) {
         ui.empty.hidden = false;
         ui.empty.textContent = "Connect the Melexis IO board with an MLX90640 on I2C.";
@@ -970,6 +1041,24 @@
       state.rxBuffer = "";
       setConnected(false);
     }
+
+    ui.rateSelect.addEventListener("change", async () => {
+      try {
+        await setRefreshRate(Number(ui.rateSelect.value));
+      } catch (error) {
+        log(`Could not change the refresh rate: ${error.message}`);
+        await readControl();
+      }
+    });
+
+    ui.patternMode.addEventListener("change", async () => {
+      try {
+        await setPattern(ui.patternMode.value === "chess");
+      } catch (error) {
+        log(`Could not change the pattern: ${error.message}`);
+        await readControl();
+      }
+    });
 
     ui.btnConnect.addEventListener("click", () => connect());
     ui.btnDisconnect.addEventListener("click", async () => { await disconnect(); log("Disconnected."); });

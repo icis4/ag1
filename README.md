@@ -157,6 +157,7 @@ triaxis/              magnetic position sensors
 fir/                  far infrared sensors
   index.html            sensor index
   detect.html           I2C bus scan and chip identification
+  mlx90614.html         MLX90614 thermometer readout over SMBus
   mlx90632.html         MLX90632 thermometer readout
   mlx90640.html         MLX90640 thermal camera readout
   mlx90641.html         MLX90641 thermal array readout

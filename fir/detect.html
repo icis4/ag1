@@ -199,6 +199,7 @@
       MLX90640: "mlx90640.html",
       MLX90641: "mlx90641.html",
       MLX90642: "mlx90642.html",
+      MLX90614: "mlx90614.html",
     };
 
     const FIRST_ADDR = 0x08, LAST_ADDR = 0x77;
@@ -294,6 +295,19 @@
 
     const readWord = async (addr, reg) => (await readWords(addr, reg, 1))[0];
 
+    /* SMBus PEC: CRC-8 with x^8 + x^2 + x + 1 over every byte of the exchange,
+     * the address bytes included. */
+    function pec(bytes) {
+      let crc = 0;
+      for (const byte of bytes) {
+        crc ^= byte;
+        for (let i = 0; i < 8; i++) {
+          crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) & 0xFF : (crc << 1) & 0xFF;
+        }
+      }
+      return crc;
+    }
+
     /* All-zero and all-one words are what a floating bus or an unmapped
      * address returns, so they are never treated as a signature. */
     const plausible = w => w !== 0x0000 && w !== 0xFFFF;
@@ -348,6 +362,26 @@
         }
         tried.push(`0x800D = 0x${word(ctrl)}, status 0x8000 = 0x${word(status)}`);
       } catch { tried.push("0x800D unreadable"); }
+
+      /* MLX90614 — SMBus, so it answers a command byte rather than a 16-bit
+       * register address, and every reply carries a PEC checksum. A correct PEC
+       * over a plausible ambient temperature is a signature nothing else here
+       * produces by accident. */
+      try {
+        const reply = await scpi(`:I2C:EXCHange ${hex(addr)},3,0x06`, PROBE_TIMEOUT);
+        const [lsb, msb, received] = reply.split(",").filter(b => b.trim()).map(b => parseInt(b, 16));
+        const expected = pec([addr << 1, 0x06, (addr << 1) | 1, lsb, msb]);
+        const raw = (msb << 8) | lsb;
+        const ambient = raw * 0.02 - 273.15;
+        if (expected === received && raw <= 0x7FFF && ambient > -45 && ambient < 130) {
+          return {
+            chip: "MLX90614",
+            note: "thermometer in TO-39, single or dual zone",
+            evidence: `RAM 0x06 = 0x${word(raw)} → ${ambient.toFixed(1)} °C, PEC ${hex2(received)} checks out`,
+          };
+        }
+        tried.push(`0x06 = 0x${word(raw)}, PEC ${expected === received ? "ok" : "bad"}`);
+      } catch { tried.push("0x06 unreadable"); }
 
       // MLX90632 — EEPROM version register carries the DSP version.
       try {

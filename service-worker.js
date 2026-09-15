@@ -36,6 +36,7 @@ const SHELL = [
   "./fir/",
   "./fir/index.html",
   "./fir/detect.html",
+  "./fir/mlx90614.html",
   "./fir/mlx90632.html",
   "./fir/mlx90640.html",
   "./fir/mlx90641.html",
