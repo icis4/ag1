@@ -832,7 +832,7 @@
       ui.infoVdd.textContent = vdd.toFixed(2) + " V";
 
       const now = performance.now();
-      if (state.lastFrameAt) ui.infoFps.textContent = `${Math.round(now - state.lastFrameAt)} ms`;
+      if (state.lastFrameAt) ui.infoFps.textContent = `${Math.round(now - state.lastFrameAt)} ms / picture`;
       state.lastFrameAt = now;
       ui.empty.hidden = true;
     }
@@ -843,13 +843,16 @@
         try {
           const frame = await readFrame();
           const { ta, vdd, subPage } = calculateTo(frame, state.params, emissivity(), Number(ui.tr.value), state.image);
+          /* Draw only once both halves of the *current* pair have arrived, then
+           * start a new pair. Rendering on every frame instead leaves half the
+           * pixels one frame behind, and that lag is itself a chequerboard —
+           * the accumulated buffer is complete, but never uniformly fresh. */
           state.seenSubpages.add(subPage);
-          // Both halves are needed before the picture is complete; drawing one
-          // subpage on its own shows a flickering checkerboard.
           if (state.seenSubpages.size >= 2) {
             correctBadPixels(state.params.brokenPixels, state.image);
             correctBadPixels(state.params.outlierPixels, state.image);
             render(state.image, ta, vdd);
+            state.seenSubpages.clear();
           }
         } catch (error) {
           if (!state.streaming) break;
